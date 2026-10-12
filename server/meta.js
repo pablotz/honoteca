@@ -227,7 +227,7 @@ export async function esWikiIntro(title) {
     const url = 'https://es.wikipedia.org/w/api.php?' + new URLSearchParams({
       action: 'query', prop: 'extracts', explaintext: '1', exintro: '1', format: 'json', titles: t,
     });
-    const r = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT), headers: { 'user-agent': 'Biblioteca/1.0' } });
+    const r = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT), headers: { 'user-agent': 'Honoteca/1.0' } });
     if (!r.ok) return null;
     const pages = Object.values((await r.json()).query.pages);
     const p = pages.find((x) => !x.missing && x.extract && x.extract.length >= 40 && !WIKI_NO_BOOK.test(x.extract.slice(0, 90)));

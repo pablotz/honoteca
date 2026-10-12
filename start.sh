@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Biblioteca — arranque completo (build de Vite + runtime Node).
+# Honoteca — arranque completo (build de Vite + runtime Node).
 #   1) instala deps si falta node_modules (npm ci si hay lock)
 #   2) copia tesseract a public/vendor (una vez; re-ejecuta si cambia)
 #   3) build del front (Vite → dist/)
 #   4) levanta el servidor en 0.0.0.0:8849 (PC + celular comparten la biblioteca)
 #
-# Uso:  ./start.sh            # puerto 8849 (Biblioteca)
+# Uso:  ./start.sh            # puerto 8849 (Honoteca)
 #       PORT=9000 ./start.sh  # otro puerto
 #
 # Para desarrollo con HMR:  npm run dev:api   (terminal 1)

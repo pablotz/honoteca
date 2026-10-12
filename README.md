@@ -1,4 +1,4 @@
-# Biblioteca
+# Honoteca
 
 Estantería que escanea lomos (foto → ISBN → metadatos) y los muestra como mueble o cuadrícula.
 LAN: PC y teléfono comparten la biblioteca (Express + SQLite; front en Vite + React).

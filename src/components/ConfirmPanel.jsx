@@ -73,7 +73,7 @@ export default function ConfirmPanel({
   return (
     <div className="confirm">
       <button type="button" className="btn ghost back" onClick={onBack}>
-        {modal ? '‹ Nueva búsqueda' : '‹ Biblioteca'}
+        {modal ? '‹ Nueva búsqueda' : '‹ Estante'}
       </button>
       <div className="cframe">
         <Tile book={confirmBook} className="ctile" />

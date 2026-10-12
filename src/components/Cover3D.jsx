@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  WebGLRenderer, Scene, PerspectiveCamera, Group, Mesh, BoxGeometry, PlaneGeometry,
+  WebGLRenderer, Scene, PerspectiveCamera, Group, Mesh, BoxGeometry,
   MeshBasicMaterial, MeshStandardMaterial, AmbientLight, DirectionalLight,
   TextureLoader, CanvasTexture, SRGBColorSpace,
 } from 'three';
@@ -108,28 +108,7 @@ export default function Cover3D({ book, style }) {
     key.position.set(1.6, 2.2, 3);
     scene.add(key);
 
-    // sombra blanda en el "suelo": el libro flota y la sombra lo sigue
-    const softShadowTexture = () => {
-      const cv = document.createElement('canvas'); cv.width = 128; cv.height = 128;
-      const c = cv.getContext('2d');
-      const g = c.createRadialGradient(64, 64, 6, 64, 64, 64);
-      g.addColorStop(0, 'rgba(0,0,0,0.65)');
-      g.addColorStop(0.6, 'rgba(0,0,0,0.32)');
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      c.fillStyle = g; c.fillRect(0, 0, 128, 128);
-      const t = new CanvasTexture(cv);
-      t.colorSpace = SRGBColorSpace;
-      return t;
-    };
-    const shadow = new Mesh(
-      new PlaneGeometry(3.6, 2.0),
-      new MeshBasicMaterial({ map: softShadowTexture(), transparent: true, depthWrite: false }),
-    );
-    shadow.rotation.x = -Math.PI / 2; // acostada en el plano XZ, bajo la base del libro grande
-    shadow.position.set(0, -1.9, 0);
-    scene.add(shadow);
-    sceneMeshes.push(shadow);
-
+    // (sin sombra de suelo: el libro flota limpio, a petición del diseño)
     // --- el libro: caja con 6 materiales (orden three: +x,-x,+y,-y,+z,-z), grande (1.4×) ---
     // portada (+z) y contraportada (-z) → MeshBasic SIN luces: la foto y la sinopsis se leen
     // tal cual. Lomo/cantos/tapas → MeshStandard: ahí viven las sombras del volumen.
@@ -267,13 +246,7 @@ export default function Cover3D({ book, style }) {
       }
       book3d.rotation.y = rotY;
       book3d.rotation.x = rotX;
-      const bob = Math.sin(t / 1100) * 0.08;
-      book3d.position.y = bob;
-      shadow.position.x = -rotY * 0.22;
-      shadow.position.z = rotX * 0.2;
-      shadow.scale.x = 1 + Math.abs(rotY) * 0.5;
-      shadow.scale.y = 0.85 + Math.abs(rotX) * 0.5;
-      shadow.material.opacity = Math.max(0.22, 0.6 - Math.abs(bob) * 2.4 + Math.min(Math.abs(rotY) * 0.12, 0.12));
+      book3d.position.y = Math.sin(t / 1100) * 0.08; // flota
       renderer.render(scene, camera);
     };
     raf = requestAnimationFrame(loop);

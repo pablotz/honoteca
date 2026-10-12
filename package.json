@@ -1,9 +1,9 @@
 {
-  "name": "biblioteca",
+  "name": "honoteca",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Biblioteca — shelf scanner + 2D wall library (LAN, phone + PC)",
+  "description": "Honoteca — your library: scan spines, 3D shelf, wishlist (LAN, phone + PC)",
   "engines": {
     "node": ">=22.12"
   },

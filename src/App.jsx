@@ -103,18 +103,13 @@ export default function App() {
     const rect = e && e.currentTarget ? e.currentTarget.getBoundingClientRect() : null;
     let bk = b;
     if (b.id) { try { bk = await api(`/api/books/${b.id}`); } catch { /* usa el resumen */ } }
-    vtx(() => {
-      setDetail(bk);
-      if (matchMedia('(min-width:900px)').matches) {
-        // escritorio: el MORF clásico — el libro cruza literalmente al panel (View Transition)
-        setPanelShow(true);
-        setFly(null);
-      } else {
-        // móvil: el overlay 3D vuela de la balda al panel (más predecible con WebGL)
-        setPanelShow(false);
-        setFly(rect ? { id: bk.id, from: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } } : null);
-      }
-    });
+    if (matchMedia('(min-width:900px)').matches) {
+      // escritorio: el libro VUELA de la balda a la ficha (View Transition); la ficha no se mueve
+      vtx(() => { setDetail(bk); setPanelShow(true); setFly(null); });
+    } else {
+      // móvil: el libro 3D vuela de la balda al panel
+      vtx(() => { setDetail(bk); setPanelShow(false); setFly(rect ? { id: bk.id, from: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } } : null); });
+    }
   };
 
   // ---- §5.2/§5.3 flujo de escaneo (4 estados) ----
@@ -347,11 +342,13 @@ export default function App() {
           : detail ? (
             <div className="split">
               <div className="split-shelf">{libraryView}</div>
-              <BookDetail book={detail} visible={panelShow} morph={matchMedia('(min-width:900px)').matches} onBack={() => vtx(goLibrary)} onAddCover={addCoverTo} onDelete={setDeleteTarget} onMove={moveSection} onRetryCover={retryCover} />
+              <BookDetail book={detail} visible={panelShow} onBack={() => vtx(goLibrary)} onAddCover={addCoverTo} onDelete={setDeleteTarget} onMove={moveSection} onRetryCover={retryCover} />
             </div>
           )
           : libraryView}
       </main>
+
+      <div className="room-floor" aria-hidden="true" />
 
       {panelShow && <div className="panel-fade" onClick={() => vtx(goLibrary)} aria-hidden="true" />}
       {fly && <FlyingBook key={fly.id} book={detail} fly={fly} onArrive={() => setPanelShow(true)} onDone={() => setFly(null)} />}

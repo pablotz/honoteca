@@ -1,10 +1,22 @@
 import Tile from './Tile.jsx';
 
+// Objetos vividos sobre las baldas: alternan por fila (no en todas, para no saturar).
+const PROPS = ['plant', 'lamp'];
+function Prop({ kind }) {
+  if (kind === 'plant') {
+    return <i className="prop plant" aria-hidden="true"><i className="leaf l1" /><i className="leaf l2" /><i className="leaf l3" /><i className="pot" /></i>;
+  }
+  if (kind === 'lamp') {
+    return <i className="prop lamp" aria-hidden="true"><i className="glow" /><i className="shade" /><i className="stem" /><i className="base" /></i>;
+  }
+  return null;
+}
+
 // estante: libros agrupados por ubicación; SIEMPRE se muestran las baldas del mueble
 // (vacías si no hay libros ahí), para que la biblioteca se vea como tal.
 // `buy`: el mueble de compras (la madera cambia para que se lea como OTRO estante).
 const SHELF_UNITS = [['A', 1], ['A', 2], ['B', 1], ['B', 2], ['C', 1], ['C', 2]];
-const DECOR = ['back-panel', 'wall wall-left', 'wall wall-right', 'plank-top', 'plank-front'];
+const DECOR = ['back-panel', 'plank-top', 'plank-front'];
 
 // Reordena los libros del mueble: `perRow` libros por balda. Pedido estable (por ubicación),
 // los que no tienen ubicación van al final. Mínimo 6 baldas aunque haya pocos libros.
@@ -26,12 +38,13 @@ export default function ShelfView({ books, perRow, onOpen, onAddCover, buy = fal
 
   return (
     <div className={`shelfview${buy ? ' buy' : ''}`}>
-      {units.map((u) => (
+      {units.map((u, ri) => (
         <div className="shelfrow" key={u}>
           {DECOR.map((c) => <i key={c} className={c} />)}
           {groups.get(u).map((b) => b.id === holeId
             ? <div key={`hole-${b.id}`} className="tile slot" /> // el libro está "sacado" del estante
             : <Tile key={b.id} book={b} onOpen={onOpen} onAddCover={onAddCover} />)}
+          {ri % 2 === 0 && <Prop key={`prop-${u}`} kind={PROPS[(ri / 2) % PROPS.length]} />}
         </div>
       ))}
     </div>

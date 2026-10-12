@@ -44,7 +44,7 @@ if (!existsSync(DIST)) {
 }
 
 app.listen(PORT, HOST, () => {
-  console.log(`Biblioteca — http://${HOST}:${PORT}`);
+  console.log(`Honoteca — http://${HOST}:${PORT}`);
   console.log(`  db:     ${_db_path}`);
   console.log(`  static: ${DIST}`);
 });
