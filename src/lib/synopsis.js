@@ -26,25 +26,17 @@ export function wrapSynopsis(text, maxLines = 20, charsPerLine = CHARS_PER_LINE)
   return lines;
 }
 
-// color promedio de una imagen (para que la contraportada «calse» con la portada).
-// Fallback a `fallback` si no carga o no hay red.
-export function dominantCoverColor(src, fallback) {
-  return new Promise((res) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const c = document.createElement('canvas'); c.width = 12; c.height = 18;
-        const cx = c.getContext('2d'); cx.drawImage(img, 0, 0, 12, 18);
-        const d = cx.getImageData(0, 0, 12, 18).data;
-        let r = 0, g = 0, b = 0, n = 0;
-        for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
-        res({ r: r / n | 0, g: g / n | 0, b: b / n | 0 });
-      } catch { res(fallback); }
-    };
-    img.onerror = () => res(fallback);
-    img.src = src;
-  });
+// color promedio de una imagen YA cargada (para que la contraportada «calse» con la portada).
+// Recibe el elemento, no una URL: así no se descarga la portada dos veces.
+export function averageColor(img) {
+  try {
+    const c = document.createElement('canvas'); c.width = 12; c.height = 18;
+    const cx = c.getContext('2d'); cx.drawImage(img, 0, 0, 12, 18);
+    const d = cx.getImageData(0, 0, 12, 18).data;
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
+    return { r: r / n | 0, g: g / n | 0, b: b / n | 0 };
+  } catch { return null; }
 }
 
 export function hexToRgb(hex) {

@@ -6,7 +6,7 @@
 // WAL activado: escrituras concurrentes (PC + celular) sin reescritura total del fichero
 // y sin corrupción si el proceso muere a media escritura.
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync, statSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -79,7 +79,7 @@ function rowToBook(row) {
     authors: row.authors ? JSON.parse(row.authors) : [],
     pages: row.pages,
     cover_url: row.cover_url,
-    cover_front: withVer(row.cover_front),
+    cover_front: row.cover_front,
     scan_back: row.scan_back,
     strip_color: row.strip_color,
     strip_present: !!row.strip_present,
@@ -99,13 +99,7 @@ function rowToBook(row) {
 
 // ISBN canónico: solo dígitos (+ X final del ISBN-10), sin guiones/espacios/«ISBN: ».
 // Único punto que lo normaliza — da igual que llegue con guiones de la cámara o del teclado.
-const cleanIsbn = (s) => String(s || '').replace(/[^0-9Xx]/g, '').toUpperCase();
-
-// Portadas: la URL llevan la versión del fichero (?v=mtime) para que un reemplazo de la
-// imagen CAMBIE la URL — un navegador que cacheó el placeholder viejo no puede reusarlo.
-const coverVer = (rel) => { try { return statSync(join(root, rel)).mtimeMs; } catch { return 0; } };
-const withVer = (rel) => (rel ? `${rel}?v=${coverVer(rel)}` : rel);
-
+export const cleanIsbn = (s) => String(s || '').replace(/[^0-9Xx]/g, '').toUpperCase();
 const FIELDS = [
   'id', 'isbn', 'title_native', 'title_romaji', 'authors', 'pages', 'publisher',
   'cover_url', 'cover_front', 'scan_back', 'strip_color', 'strip_present',
@@ -208,7 +202,8 @@ export function update_book(id, patch) {
 // portada, lomo, needs_review) se escribe sobre TODOS los renglones de ese ISBN. Si no,
 // tus tres 雪国 podrían acabar con 610 y 612 páginas y el lomo saldría de dos anchos.
 // Per-ejemplar (NO aquí): location, scan_back, source, confidence.
-const TITLE_FIELDS = [
+// Se EXPORTA: api.js usa la misma lista para partir los campos (una sola fuente de verdad).
+export const TITLE_FIELDS = [
   'title_native', 'title_romaji', 'authors', 'pages', 'publisher',
   'cover_url', 'cover_front', 'strip_color', 'strip_present', 'mirrored', 'needs_review', 'description',
 ];
@@ -246,8 +241,12 @@ export function clearNeedsReview(isbn, id) {
   else if (id) db.prepare('UPDATE books SET needs_review=0, updated_at=? WHERE id=?').run(now(), id);
 }
 
-export function count_generated() {
-  return db.prepare("SELECT COUNT(*) AS n FROM books WHERE cover_shown='generated'").get().n;
+// Una transacción: o se aplican TODAS las escrituras, o ninguna. Para guardar un libro
+// (renglón + foto + título propagado) que son varias llamadas seguidas.
+export function tx(fn) {
+  db.exec('BEGIN');
+  try { const out = fn(); db.exec('COMMIT'); return out; }
+  catch (e) { try { db.exec('ROLLBACK'); } catch { /* ya abortada */ } throw e; }
 }
 
 // TODOS los renglones de un ISBN (estado D: 2, 3, N ejemplares del mismo título — cada

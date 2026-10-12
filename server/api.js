@@ -1,10 +1,10 @@
-// server/api.js — rutas HTTP. Habla con la DB solo por las 4 funciones de db.js.
+// server/api.js — rutas HTTP. Habla con la DB solo por las funciones de db.js.
 import { Router } from 'express';
-import { renameSync, existsSync, mkdirSync, writeFileSync, statSync, unlinkSync } from 'node:fs';
+import { renameSync, existsSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
-import { add_book, get_book, list_books, update_book, update_title, count_generated, find_by_isbn, escalateNeedsReview, clearNeedsReview, remove_book } from './db.js';
-import { uploadPhoto, COVERS } from './upload.js';
+import { join, resolve, sep } from 'node:path';
+import { add_book, get_book, list_books, update_book, update_title, find_by_isbn, escalateNeedsReview, clearNeedsReview, remove_book, tx, cleanIsbn, TITLE_FIELDS as DB_TITLE_FIELDS } from './db.js';
+import { uploadPhoto, COVERS, TMP } from './upload.js';
 import { lookup_isbn, cover_by_title, search_by_title, gbDescription, esWikiIntro } from './meta.js';
 
 const BACK = join(COVERS, 'back');
@@ -12,15 +12,21 @@ const FRONT = join(COVERS, 'front');
 mkdirSync(BACK, { recursive: true });
 mkdirSync(FRONT, { recursive: true });
 
-// portada cacheada: con ?v=mtime para que un reemplazo cambie la URL y mate cachés viejas
-const hitVer = (rel) => { try { return statSync(rel).mtimeMs; } catch { return 0; } };
-const verPath = (rel) => (rel ? `${rel}?v=${hitVer(rel)}` : rel);
+// Seguridad de rutas: nada que venga del cliente puede salir de covers/. `safeJoin` une y
+// RECHAZA si el resultado se escapa de la base (anti path traversal).
+const safeJoin = (base, name) => {
+  const p = resolve(base, String(name));
+  return p === base || p.startsWith(base + sep) ? p : null;
+};
+const safeName = (s) => (/^[A-Za-z0-9._-]+$/.test(String(s)) ? String(s) : null);
 
 // Promueve una foto de covers/tmp → covers/<kind>/<id>.jpg y devuelve la ruta relativa
 function promote(tmpFile, kind, id) {
-  const final = join(COVERS, kind, `${id}.jpg`);
+  const name = safeName(id);
+  if (!name) throw new Error('id inválido');
+  const final = join(COVERS, kind, `${name}.jpg`);
   renameSync(tmpFile, final);
-  return `covers/${kind}/${id}.jpg`;
+  return `covers/${kind}/${name}.jpg`;
 }
 
 // Portadas de Google llevan un token firmado de corta vida (imgtk=): guardadas tal cual
@@ -106,10 +112,6 @@ api.get('/books', (req, res) => {
   res.json(list_books(filter));
 });
 
-api.get('/stats', (_req, res) => {
-  res.json({ sin_portada: count_generated() }); // WHERE cover_shown='generated'
-});
-
 // buscar por TÍTULO (sin ISBN): texto → hit de Open Library (título, autor, portada, sinopsis)
 api.get('/search', async (req, res) => {
   try {
@@ -133,15 +135,6 @@ api.get('/books/:id', (req, res) => {
   res.json(b);
 });
 
-api.post('/books', (req, res) => {
-  try {
-    const b = add_book(req.body || {});
-    res.status(201).json(b);
-  } catch (e) {
-    res.status(400).json({ error: String(e.message || e) });
-  }
-});
-
 api.patch('/books/:id', (req, res) => {
   const b = update_book(req.params.id, req.body || {});
   if (!b) return res.status(404).json({ error: 'no existe' });
@@ -150,12 +143,11 @@ api.patch('/books/:id', (req, res) => {
 
 // Borrado: un renglón = un ejemplar. La portada (cover_front) es de la EDICIÓN: solo se
 // borra su fichero si esta era la última copia del ISBN; la foto del lomo es per-ejemplar.
+// `rmFile` acepta solo rutas RELATIVAS dentro de covers/ (nunca sale de ahí).
 const rmFile = (rel) => {
   if (!rel || !rel.startsWith('covers/')) return; // hotlink (cover_url) → no es fichero local
-  try {
-    const p = join(COVERS, rel.split('?')[0].slice('covers/'.length));
-    if (existsSync(p)) unlinkSync(p);
-  } catch { /* ignorar */ }
+  const p = safeJoin(COVERS, rel.split('?')[0].slice('covers/'.length));
+  try { if (p && existsSync(p)) unlinkSync(p); } catch { /* ignorar */ }
 };
 api.delete('/books/:id', (req, res) => {
   const b = get_book(req.params.id);
@@ -225,12 +217,19 @@ api.post('/books/:id/cover', async (req, res) => {
 // metadatos por ISBN: openbd → NDL → Open Library → Google Books.
 // Siempre 200: devuelve hit (o null) + el reporte por fuente (hit/miss/skipped/error),
 // para que «no lo tiene» y «no se pudo preguntar» no se lean igual.
+// El resultado se CACHEA por ISBN (24 h): la cadena de fuentes es lenta y no cambia en el día.
+const META_TTL = 24 * 60 * 60 * 1000;
+const metaCache = new Map(); // isbn → { at, hit, report }
 api.get('/meta/:isbn', async (req, res) => {
+  const isbn = cleanIsbn(req.params.isbn);
+  const cached = metaCache.get(isbn);
+  if (cached && Date.now() - cached.at < META_TTL) {
+    return res.json({ isbn, hit: cached.hit, sources: cached.report, cached: true });
+  }
   try {
-    const { hit, isbn, report } = await lookup_isbn(req.params.isbn);
+    const { hit, report } = await lookup_isbn(isbn);
     if (hit) {
       hit.cover_front = await coverForHit(hit, isbn);
-      if (hit.cover_front) hit.cover_front = verPath(hit.cover_front);
       // sinopsis en el idioma de la edición (ES para ejemplares en español): Google primero
       // (cuota), Wikipedia en español como red. Deja la de OL solo si ambas fallan.
       if (hit.description || hit.title_native) {
@@ -240,6 +239,8 @@ api.get('/meta/:isbn', async (req, res) => {
         else if (wi) hit.description = wi;
       }
     }
+    if (metaCache.size > 500) metaCache.clear(); // techo de memoria
+    metaCache.set(isbn, { at: Date.now(), hit: hit || null, report });
     res.json({ isbn, hit: hit || null, sources: report });
   } catch (e) {
     res.status(502).json({ error: String(e.message || e), isbn: req.params.isbn });
@@ -254,9 +255,10 @@ api.get('/meta/:isbn', async (req, res) => {
 // `state`; si el cliente lo manda a mano, se ignora (single-writer).
 const CONFIRM_ACTIONS = new Set(['update', 'create']);
 
-// §4 — frontera de campos:
-const TITLE_FIELDS = ['title_native', 'title_romaji', 'authors', 'pages', 'publisher',
-  'cover_url', 'cover_front', 'strip_color', 'strip_present', 'mirrored', 'description'];
+// §4 — frontera de campos: la lista de campos de EDICIÓN vive en db.js (una sola fuente).
+// Aquí solo se excluye needs_review: es de un solo escritor (el cliente pide ACCIONES, no
+// valores). Per-ejemplar: isbn, location, source, confidence, section.
+const TITLE_FIELDS = DB_TITLE_FIELDS.filter((f) => f !== 'needs_review');
 const COPY_FIELDS = ['isbn', 'location', 'source', 'confidence', 'section'];
 function splitFields(book = {}) {
   const title = {}, perCopy = {};
@@ -273,11 +275,13 @@ function stripFields(strip) {
   if (strip.mirrored != null) out.mirrored = !!strip.mirrored;
   return out;
 }
-// scan_back es per-ejemplar: promueve la foto de tmp y devuelve la ruta (o null)
+// scan_back es per-ejemplar: promueve la foto de tmp y devuelve la ruta (o null).
+// El `ticket` viene del cliente → solo se acepta un nombre simple dentro de covers/tmp.
 function attachBackPhoto(ticket, id) {
-  if (!ticket) return null;
-  const src = join(COVERS, 'tmp', ticket);
-  if (!existsSync(src)) return null; // ticket expirado/purgado: degrada sin romper
+  const name = ticket && safeName(ticket);
+  if (!name) return null;
+  const src = safeJoin(TMP, name);
+  if (!src || !existsSync(src)) return null; // ticket expirado/purgado: degrada sin romper
   return promote(src, 'back', id);
 }
 // patch de TÍTULO → a TODOS los renglones del ISBN; sin ISBN (C manual) → solo esa fila
@@ -312,10 +316,14 @@ api.post('/confirm', (req, res) => {
     // Regla 5 §6.1: una copia repetida (D) nace SIN hueco — la dirección de la primera
     // no dice nada de la segunda. Colocarla es un arrastre después. En A la propuesta vale.
     if (state === 'D') createFields.location = null;
-    const created = add_book(createFields);
-    const back = attachBackPhoto(ticket, created.id);
-    if (back) update_book(created.id, { scan_back: back });
-    applyTitle(created.isbn, created.id, titlePatch);
+    // una transacción: o queda el renglón con su foto y su título, o no queda nada
+    const created = tx(() => {
+      const c = add_book(createFields);
+      const back = attachBackPhoto(ticket, c.id);
+      if (back) update_book(c.id, { scan_back: back });
+      applyTitle(c.isbn, c.id, titlePatch);
+      return c;
+    });
     res.status(201).json(finalize(created.id, state));
   } catch (e) {
     res.status(400).json({ error: String(e.message || e) });

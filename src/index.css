@@ -109,15 +109,9 @@ main { padding:16px; }
   .shelfrow .tile.gen { width:130px; }
   .grid { grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:20px; }
 }
-/* ficha del libro: página completa centrada; el LIBRO grande es el protagonista
-   (la sinopsis vive en su contraportada, no al lado) */
-.page { max-width:880px; margin:0 auto; text-align:center; }
-.page .back { width:auto; padding:9px 14px; font-size:14px; margin:0 0 18px; text-align:left; }
 /* el «‹» de la ficha y de la confirmación (vuelve al estante): relleno, no solo borde (igual que el resto) */
 .btn.ghost.back { background:var(--panel); border-color:var(--line); color:var(--ink); }
 .btn.ghost.back:active { background:var(--line); }
-.dlayout { display:flex; gap:36px; align-items:flex-start; }
-.covercol { display:flex; flex-direction:column; align-items:center; gap:12px; flex:0 0 auto; }
 .coverbtn { width:min(36vw, 330px); padding:10px 12px; font-size:14px; }
 .bcover { flex:0 0 auto; width:min(36vw, 330px); aspect-ratio:2/3; border-radius:0;
           background-size:cover; background-position:center; border:1px solid var(--line);
@@ -133,20 +127,6 @@ main { padding:16px; }
                    border-radius:inherit; }
 .burst3d { position:fixed; inset:0; z-index:40; pointer-events:none; }
 .burst3d canvas { display:block; width:100%; height:100%; }
-.dright { flex:1; min-width:0; text-align:left; }
-.btitle { font-family:ui-serif, Georgia, 'Times New Roman', serif; font-weight:700; font-size:30px;
-          line-height:1.2; margin:0 0 6px; word-break:break-word; }
-/* ficha técnica pequeña: Autor / Editorial como tabla con separador punteado, centrada */
-.dmeta { display:inline-flex; flex-direction:column; gap:4px; margin-top:10px; padding-top:12px;
-         border-top:1px dashed var(--line); text-align:left; }
-.mline { display:flex; gap:10px; font-size:14px; line-height:1.45; }
-.mk { color:var(--dim); font-size:11.5px; text-transform:uppercase; letter-spacing:.07em;
-      flex:0 0 auto; min-width:72px; padding-top:2px; }
-.mv { color:var(--ink); }
-
-/* el libro: HUGE, centrado, debajo de la ficha técnica */
-.coverbig { margin:26px auto 0; width:min(78vw, 470px); display:flex; flex-direction:column;
-            align-items:center; gap:12px; }
 /* --- ficha flotante a la derecha del mueble: SIN caja. Solo tipografía, línea y el libro.
    El contenedor no se mueve; al cambiar de libro solo se funde el contenido (.pane). --- */
 .split { display:flex; gap:60px; align-items:flex-start; justify-content:center; }
@@ -177,7 +157,6 @@ main { padding:16px; }
                background:var(--bg); color:var(--dim); font-size:15px; cursor:pointer;
                transition:transform .14s ease; }
 .panel-close:active { transform:scale(.92); background:var(--line); }
-.detail-panel .dmeta { margin-top:0; align-self:stretch; }
 
 /* el hueco que deja el libro "sacado" del estante: espacio vacío, sin caja */
 .tile.slot { cursor:default; background:none; border:0; box-shadow:none; }
@@ -242,15 +221,6 @@ main { padding:16px; }
   .panel-fade { display:block; position:fixed; inset:0; background:#0009; z-index:30; animation:fadeIn .18s ease; }
   .detail-panel { position:fixed; left:10px; right:10px; bottom:10px; top:auto; height:auto; z-index:40;
                   max-height:82dvh; border-radius:20px; box-shadow:0 -14px 44px #000a; }
-}
-.blurb { margin-top:22px; font-size:15px; line-height:1.75; white-space:pre-wrap; color:var(--ink);
-         background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px 18px; }
-.blurb-label { display:block; font-size:12px; color:var(--dim); text-transform:uppercase;
-               letter-spacing:.08em; margin-bottom:8px; font-weight:600; }
-@media (max-width:640px){
-  .dlayout { flex-direction:column; align-items:center; }
-  .dright { text-align:center; }
-  .bcover, .coverbtn, .page-foot { width:62vw; }
 }
 /* estado vacío §6.2 — el mueble, vacío */
 .empty { text-align:left; padding:6px 2px 0; }

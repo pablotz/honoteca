@@ -16,10 +16,11 @@ export function normalizeAuthor(a) {
   return parts.join('');
 }
 
+// ISBN tal cual (sin guiones): el agrupado real depende del país de registro y no se puede
+// adivinar por posición — inventarlo daba cosas como «978-6-073-1982-88».
 export function fmtIsbn(isbn) {
   const d = String(isbn || '').replace(/[^0-9Xx]/g, '');
-  if (d.length !== 13) return d || '—';
-  return `${d.slice(0, 3)}-${d.slice(3, 4)}-${d.slice(4, 7)}-${d.slice(7, 11)}-${d.slice(11)}`;
+  return d || '—';
 }
 
 // dígito de control: EAN-13 (mod-10) e ISBN-10 (mod-11, X = 10). Un ISBN que no lo

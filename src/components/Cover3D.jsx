@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import {
   WebGLRenderer, Scene, PerspectiveCamera, Group, Mesh, BoxGeometry,
   MeshBasicMaterial, MeshStandardMaterial, AmbientLight, DirectionalLight,
-  TextureLoader, CanvasTexture, SRGBColorSpace,
+  Texture, CanvasTexture, SRGBColorSpace,
 } from 'three';
 import { displayTitle, blurbText } from '../lib/book.js';
-import { wrapSynopsis, dominantCoverColor, hexToRgb } from '../lib/synopsis.js';
+import { wrapSynopsis, averageColor, hexToRgb } from '../lib/synopsis.js';
 
 // Título de contraportada: encoje la fuente hasta que el título complete entre en ≤2 líneas
 // dentro del ancho útil (medido, no a ciegas). Solo si ni a 56px cabe, corta con « … ».
@@ -135,8 +135,17 @@ export default function Cover3D({ book, style }) {
       front.needsUpdate = true;
     };
     if (src) {
-      new TextureLoader().setCrossOrigin('anonymous')
-        .load(src, setTexture, undefined, () => setTexture(null));
+      // UNA sola descarga: la misma imagen sirve de textura de la tapa y para muestrear el
+      // color de la contraportada (antes se bajaba dos veces).
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        setTexture(new Texture(img));
+        const base = averageColor(img);
+        if (base) paintBack(wrapSynopsis(blurbText(book.description), 12, 24), base);
+      };
+      img.onerror = () => setTexture(null);
+      img.src = src;
     }
 
     // --- contraportada: sinopsis sobre el color dominante de la portada ---
@@ -158,11 +167,6 @@ export default function Cover3D({ book, style }) {
     const fallbackBase = hexToRgb(book.strip_color) || { r: 36, g: 23, b: 8 };
     const backLines = wrapSynopsis(blurbText(book.description), 12, 24); // letra GRANDE → menos líneas, legible
     paintBack(backLines, fallbackBase);
-    if (src) { // el tono real de la portada llega con la imagen (async)
-      dominantCoverColor(src, fallbackBase).then((base) => {
-        paintBack(backLines, base);
-      });
-    }
 
     // --- entradas: dedo (spin + tap para voltear), ratón (parallax), giroscopio ---
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;

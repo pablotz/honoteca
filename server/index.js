@@ -17,18 +17,32 @@ const envFile = join(root, '.env');
 if (existsSync(envFile)) { try { process.loadEnvFile(envFile); } catch { /* .env inválido: seguir */ } }
 
 const args = process.argv.slice(2);
-const portArg = args.find((a, i) => a === '--port' || args[i - 1] === '--port');
 const PORT = Number(process.env.PORT || (args.includes('--port') ? args[args.indexOf('--port') + 1] : 0) || 8849);
 const HOST = process.env.HOST || '0.0.0.0';
 
+// Guardarraíl de despliegue: en producción NO se arranca sin login configurado.
+if (process.env.NODE_ENV === 'production' && !process.env.OWNER_EMAIL) {
+  console.error('[honoteca] NODE_ENV=production sin OWNER_EMAIL: la app quedaría ABIERTA. Define OWNER_EMAIL (y AUTH_SECRET).');
+  process.exit(1);
+}
+
 const app = express();
+
+// Detrás de un reverse proxy (Caddy/nginx) hay que confiar en el primer salto para ver la IP
+// real (rate limit) y el protocolo. Directo a internet, déjalo apagado.
+if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
+
 app.use(express.json({ limit: '2mb' }));
 
 // fotos servidas como archivos (nunca BLOB/base64 al leer).
 // no-store: un cover cacheado en el navegador tras un cambio (placeholder→real) no se
 // refresca con max-age=0 en todos los clientes; sin caché, lo que ves es lo que hay.
+// nosniff: el navegador no debe adivinar el tipo (un archivo subido no se ejecuta).
 app.use('/covers', express.static(join(root, 'covers'), {
-  setHeaders: (res) => res.setHeader('Cache-Control', 'no-store'),
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  },
 }));
 app.use('/api', api);
 app.use(express.static(DIST, {

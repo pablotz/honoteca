@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fmtIsbn, normalizeAuthor, displayTitle, displayAuthor, blurbText, validIsbn, locText } from './book.js';
 
-test('fmtIsbn: agrupa EAN-13, deja el resto tal cual (o —)', () => {
-  assert.equal(fmtIsbn('9786073198288'), '978-6-073-1982-88');
-  assert.equal(fmtIsbn('978-607-319-828-8'), '978-6-073-1982-88');
+test('fmtIsbn: deja los dígitos tal cual (o —)', () => {
+  assert.equal(fmtIsbn('9786073198288'), '9786073198288');
+  assert.equal(fmtIsbn('978-607-319-828-8'), '9786073198288');
   assert.equal(fmtIsbn('12345'), '12345');
   assert.equal(fmtIsbn(''), '—');
 });
@@ -26,7 +26,7 @@ test('normalizeAuthor: openbd estilo JP y "Apellido,Nombre,año"', () => {
 test('displayTitle/displayAuthor: preferencia native → romaji → ISBN', () => {
   assert.equal(displayTitle({ title_native: '雪国', title_romaji: 'Yukiguni' }), '雪国');
   assert.equal(displayTitle({ title_romaji: 'Yukiguni' }), 'Yukiguni');
-  assert.equal(displayTitle({ isbn: '9786073198288' }), 'ISBN 978-6-073-1982-88');
+  assert.equal(displayTitle({ isbn: '9786073198288' }), 'ISBN 9786073198288');
   assert.equal(displayAuthor({ authors: ['Boswell,Dustin,1976-'] }), 'Dustin Boswell');
   assert.equal(displayAuthor({ authors: [] }), '');
 });
