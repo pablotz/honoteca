@@ -48,6 +48,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_books_cover_shown ON books(cover_shown);
   CREATE INDEX IF NOT EXISTS idx_books_isbn ON books(isbn);
   CREATE INDEX IF NOT EXISTS idx_books_location ON books(location_shelf, location_row, location_pos);
+
+  -- magic link: un renglón por enlace pendiente (se guarda el HASH, nunca el token en claro)
+  CREATE TABLE IF NOT EXISTS login_tokens (
+    token_hash TEXT PRIMARY KEY,
+    expires_at INTEGER NOT NULL,
+    used       INTEGER DEFAULT 0
+  );
 `);
 
 // descripción: la captura las fuentes que la dan (googlebooks); para bibliotecas ya creadas
@@ -264,6 +271,21 @@ export function find_by_isbn(isbn, section) {
 // (depende de si era la última copia del ISBN, y ahí sí ve el contexto completo).
 export function remove_book(id) {
   return db.prepare('DELETE FROM books WHERE id=?').run(id).changes > 0;
+}
+
+// --- magic link (login por correo) ----------------------------------------------------
+export function createLoginToken(hash, expiresAt) {
+  db.prepare('INSERT INTO login_tokens (token_hash, expires_at) VALUES (?,?)').run(hash, expiresAt);
+}
+// válido una sola vez y sin caducar; lo marca usado al consumirlo
+export function consumeLoginToken(hash) {
+  const r = db.prepare('SELECT expires_at, used FROM login_tokens WHERE token_hash=?').get(hash);
+  if (!r || r.used || r.expires_at < Date.now()) return false;
+  db.prepare('UPDATE login_tokens SET used=1 WHERE token_hash=?').run(hash);
+  return true;
+}
+export function purgeLoginTokens() {
+  db.prepare('DELETE FROM login_tokens WHERE expires_at < ?').run(Date.now());
 }
 
 export const _db_path = DB_PATH;

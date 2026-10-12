@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, lookupMeta } from './lib/api.js';
+import { authMe, logout } from './lib/auth.js';
 import { decodeIsbn } from './lib/barcode.js';
 import { computeStrip } from './lib/strip.js';
 import { ocrTitleFrom } from './lib/ocr.js';
@@ -19,6 +20,7 @@ import DeleteDialog from './components/DeleteDialog.jsx';
 import Burst3D from './components/Burst3D.jsx';
 import FlyingBook from './components/FlyingBook.jsx';
 import SearchLoader from './components/SearchLoader.jsx';
+import Login from './components/Login.jsx';
 
 const THEMES = ['dark', 'sepia', 'light'];
 const clampPerRow = (v, max) => Math.max(1, Math.min(Number(v) || 6, max));
@@ -46,6 +48,9 @@ export default function App() {
   const toastTimer = useRef(null);
   const toastKey = useRef(0);
   const [fly, setFly] = useState(null);          // clon del libro volando de la balda al panel
+  const [auth, setAuth] = useState(null);        // null = comprobando; luego { authed, required, mail }
+  useEffect(() => { authMe().then(setAuth); }, []);
+  const doLogout = async () => { await logout(); setAuth((a) => ({ ...a, authed: false })); };
   const [panelShow, setPanelShow] = useState(false); // el panel se revela al llegar el libro
 
   const showToast = (kind, title, note = '') => {
@@ -88,8 +93,8 @@ export default function App() {
     try { setBooks(await api(`/api/books?section=${sectionRef.current}`)); } catch { /* deja lo que había */ }
     setLoaded(true);
   }, []);
-  useEffect(() => { refresh(); }, [refresh]);
-  useEffect(() => { refresh(); }, [section]); // al cambiar de estante, recargar esa balda
+  useEffect(() => { if (auth?.authed) refresh(); }, [refresh, auth?.authed]);
+  useEffect(() => { if (auth?.authed) refresh(); }, [section, auth?.authed]); // al cambiar de estante, recargar esa balda
 
   // vuelve a la biblioteca: sin ficha, sin confirmación, sin sesión
   const goLibrary = () => {
@@ -296,6 +301,10 @@ export default function App() {
   const mainBusy = busy && !busy.modal;
   const dialogBusy = busy && busy.modal;
 
+  // Puerta de acceso: sin sesión (y con auth configurada) solo se ve la pantalla de entrada.
+  if (auth === null) return null;
+  if (auth.required && !auth.authed) return <Login mail={auth.mail} />;
+
   const confirmProps = {
     session, state: confirmState, entry, onEntry: setEntry,
     onRetake: pickPhoto, onPickCover, onCommit: commit, onProposal: proposal,
@@ -329,6 +338,7 @@ export default function App() {
         section={section} onSection={changeSection}
         perRow={perRow} maxPerRow={maxPerRow} onPerRow={(v) => vtx(() => setPerRow(v))}
         onAdd={openNew}
+        onLogout={auth.required ? doLogout : null}
       />
 
       <main>

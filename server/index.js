@@ -6,6 +6,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { api } from './api.js';
+import { auth, requireAuth, authOn } from './auth.js';
 import { purgeTmp } from './upload.js';
 import { _db_path } from './db.js';
 
@@ -38,13 +39,14 @@ app.use(express.json({ limit: '2mb' }));
 // no-store: un cover cacheado en el navegador tras un cambio (placeholder→real) no se
 // refresca con max-age=0 en todos los clientes; sin caché, lo que ves es lo que hay.
 // nosniff: el navegador no debe adivinar el tipo (un archivo subido no se ejecuta).
-app.use('/covers', express.static(join(root, 'covers'), {
+app.use('/covers', requireAuth, express.static(join(root, 'covers'), {
   setHeaders: (res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
   },
 }));
-app.use('/api', api);
+app.use('/api', auth);              // /api/auth/* es público (pedir/abrir el enlace, logout)
+app.use('/api', requireAuth, api);  // el resto del API queda detrás del login
 app.use(express.static(DIST, {
   setHeaders: (res, p) => { if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-store'); },
 })); // index.html + assets + vendor/ (lo que Vite copia de public/). El HTML, sin caché: siempre vivo.
@@ -61,4 +63,8 @@ app.listen(PORT, HOST, () => {
   console.log(`Honoteca — http://${HOST}:${PORT}`);
   console.log(`  db:     ${_db_path}`);
   console.log(`  static: ${DIST}`);
+  console.log(`  auth:   ${authOn() ? `magic link (solo ${process.env.OWNER_EMAIL})` : 'ABIERTA — define OWNER_EMAIL para protegerla'}`);
+  if (authOn() && !process.env.AUTH_SECRET) {
+    console.warn('  aviso:  sin AUTH_SECRET las sesiones se firman con un secreto aleatorio y se pierden al reiniciar.');
+  }
 });

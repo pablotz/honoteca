@@ -201,6 +201,19 @@ main { padding:16px; }
 .prop.lamp .glow { position:absolute; bottom:24px; left:50%; transform:translateX(-50%); width:84px; height:54px;
   background:radial-gradient(circle, rgba(255,214,130,.5), rgba(255,214,130,0) 70%); pointer-events:none; }
 
+/* puerta de entrada (magic link): tarjeta centrada sobre la habitación */
+.login { min-height:100dvh; display:flex; align-items:center; justify-content:center; padding:20px; }
+.login-card { width:min(92vw, 380px); display:flex; flex-direction:column; gap:12px; padding:24px;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--room1) 84%, #000 16%),
+                                     color-mix(in srgb, var(--room2) 76%, #000 24%));
+  border:1px solid rgba(0,0,0,.5); border-radius:18px;
+  box-shadow:0 24px 50px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.05); }
+.login-brand { font-family:ui-serif, Georgia, 'Times New Roman', serif; font-weight:700; font-size:26px;
+               text-align:center; color:var(--ink); }
+.login-msg { font-size:14px; line-height:1.5; color:var(--ink); text-align:center; margin:0; }
+.login-dev { font-size:12px; color:var(--dim); text-align:center; margin:0; }
+.login-card .input { margin-top:0; }
+
 /* en el teléfono los objetos estorban: se ocultan */
 @media (max-width:640px) { .prop { display:none; } }
 

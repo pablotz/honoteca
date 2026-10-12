@@ -52,3 +52,22 @@ Abre `http://localhost:5173` (en la LAN: `http://<ip-del-pc>:5173`).
 
 `.env` (opcional, ver `.env.example`): `GOOGLE_BOOKS_API_KEY` (4ª fuente de metadatos),
 `PORT`, `HOST`.
+
+## Acceso (magic link)
+
+Sin `OWNER_EMAIL` la app queda **abierta** (cómodo en LAN o local). Para exponerla en
+internet, define en `.env`:
+
+- `OWNER_EMAIL` — el único correo que puede entrar (con esto se **activa** el login).
+- `AUTH_SECRET` — cadena larga y aleatoria para firmar la cookie de sesión.
+- `RESEND_API_KEY` — para enviar el enlace por [Resend](https://resend.com). **Sin esta key el
+  enlace se imprime en el log del servidor** (así se prueba en local sin proveedor de correo).
+- `RESEND_FROM` / `APP_URL` — remitente verificado y base pública del enlace (si no, se deduce
+  del request, respetando `x-forwarded-proto` de un reverse proxy).
+
+Flujo: entras tu correo → te llega un enlace de un solo uso (15 min) → lo abres y quedas con
+una cookie de sesión de 30 días. `/api/*` (salvo `/api/auth/*`) y `/covers/*` quedan detrás del
+login; el SPA y `/health` son públicos.
+
+Para un despliegue real: `NODE_ENV=production` **impide arrancar sin `OWNER_EMAIL`** (guardarraíl),
+y detrás de un reverse proxy define `TRUST_PROXY=1` para que el límite de intentos vea la IP real.
