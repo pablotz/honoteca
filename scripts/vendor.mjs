@@ -1,4 +1,6 @@
-// scripts/vendor.mjs — copia three + zxing-wasm + tesseract.js desde node_modules a public/vendor.
+// scripts/vendor.mjs — copia tesseract.js desde node_modules a public/vendor.
+// (zxing-wasm y three van por Vite desde npm: zxing bundlea su .wasm con ?url, three se
+// importa directo y su árbol se reduce solo con lo que usa la app.)
 // Idempotente: si el destino ya tiene el fichero, no recopia. Sin CDN: todo self-host.
 import { cp, mkdir, access, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
@@ -10,33 +12,6 @@ const NM = join(root, 'node_modules');
 const OUT = join(root, 'public', 'vendor');
 
 const exists = async (p) => { try { await access(p, constants.F_OK); return true; } catch { return false; } };
-
-// three: el build ESM (no addons: solo core en v1) → public/vendor/three/
-async function vendorThree() {
-  const src = join(NM, 'three', 'build');
-  if (!(await exists(src))) { console.warn('[vendor] three no instalado — salto'); return; }
-  const dst = join(OUT, 'three');
-  await mkdir(dst, { recursive: true });
-  await cp(join(src, 'three.module.js'), join(dst, 'three.module.js'));
-  console.log('[vendor] three → public/vendor/three/three.module.js');
-}
-
-// zxing-wasm: dist/es/*.js (wrapper) + dist/reader/zxing_reader.wasm (single-thread, sin COOP/COEP)
-async function vendorZxing() {
-  const pkg = join(NM, 'zxing-wasm');
-  if (!(await exists(pkg))) { console.warn('[vendor] zxing-wasm no instalado — salto'); return; }
-  const dst = join(OUT, 'zxing');
-  const esDst = join(dst, 'es');
-  const readerDst = join(dst, 'reader');
-  await mkdir(esDst, { recursive: true });
-  await mkdir(readerDst, { recursive: true });
-
-  const esSrc = join(pkg, 'dist', 'es');
-  const readerSrc = join(pkg, 'dist', 'reader');
-  if (await exists(esSrc)) await cp(esSrc, esDst, { recursive: true });
-  if (await exists(readerSrc)) await cp(readerSrc, readerDst, { recursive: true });
-  console.log('[vendor] zxing-wasm → public/vendor/zxing/{es,reader}');
-}
 
 // tesseract.js: main + worker desde node_modules; core simd-lstm (single-thread, sin
 // COOP/COEP) desde tesseract.js-core; spa.traineddata.gz se baja UNA vez si falta.
@@ -68,7 +43,5 @@ async function vendorTesseract() {
   console.log('[vendor] tesseract.js → public/vendor/tesseract/');
 }
 
-await vendorThree();
-await vendorZxing();
 await vendorTesseract();
 console.log('[vendor] listo');

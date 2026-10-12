@@ -1,0 +1,416 @@
+:root { color-scheme: dark;
+  --bg:#14110e; --panel:#1d1913; --line:#2c2620; --ink:#eee6da; --dim:#9a8f80;
+  --mustard:#d99a2b; --strip:#3a332a; --plank:#1d1913; --plankhi:#41382c; --wood:#241b13; --woodhi:#2f2319;
+  --wood1:#241708; --wood2:#150d05; --danger:#e0715f; }
+:root[data-theme="sepia"] { color-scheme: light;
+  --bg:#f2e6d0; --panel:#eadac0; --line:#d2bfa0; --ink:#3a2f23; --dim:#8d7c64;
+  --mustard:#a06b20; --strip:#8a6f4d; --plank:#cfb287; --plankhi:#e6d3ae; --wood:#cfb287; --woodhi:#e4cda4;
+  --wood1:#e7d9bc; --wood2:#ddcdae; --danger:#a03a2a; }
+:root[data-theme="light"] { color-scheme: light;
+  --bg:#f6f4ef; --panel:#ffffff; --line:#e0dad0; --ink:#1f1c18; --dim:#7f766b;
+  --mustard:#a8710a; --strip:#8d8373; --plank:#e0d8ca; --plankhi:#f1ebdf; --wood:#e7dfd0; --woodhi:#f3eddf;
+  --wood1:#f1ece1; --wood2:#eae3d5; --danger:#b3261e; }
+* { box-sizing: border-box; }
+body { margin:0; font:15px/1.5 system-ui, -apple-system, sans-serif; color:var(--ink);
+       /* pared de tablones, más oscura que el estante */
+       background:
+         repeating-linear-gradient(90deg, rgba(0,0,0,.22) 0 1px, transparent 1px 7px,
+           rgba(255,255,255,.02) 7px 8px, transparent 8px 21px),
+         repeating-linear-gradient(180deg, var(--wood1) 0 44px, var(--wood2) 44px 47px),
+         var(--bg);
+       background-attachment: fixed;
+       -webkit-tap-highlight-color: transparent; }
+header { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; gap:12px; align-items:center;
+         padding:11px 16px; background:var(--panel); border-bottom:1px solid var(--line); }
+.brand { font-weight:700; letter-spacing:.3px; }
+.ico { width:36px; height:36px; border-radius:10px; border:1px solid var(--line); background:var(--bg);
+       color:var(--dim); font-size:17px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.ico.active { color:var(--mustard); border-color:var(--mustard); background:var(--line); }
+.ico:active { background:var(--line); }
+.grow { flex:1; }
+.perrow { display:flex; align-items:center; gap:5px; margin-left:6px; font-size:12px; color:var(--dim); }
+.perrow input { width:88px; accent-color:var(--mustard); cursor:pointer; }
+.perrow b { min-width:12px; text-align:center; }
+.add { margin-left:10px; width:38px; height:38px; border-radius:50%; border:0; background:var(--mustard); color:#24180a;
+       font-size:20px; font-weight:700; line-height:1; cursor:pointer; flex:0 0 auto; }
+/* FAB: en teléfono el punto de entrada a la captura vive ABAJO (pulgar) — §6 */
+.fab { display:none; position:fixed; z-index:20; right:18px; bottom:calc(18px + env(safe-area-inset-bottom, 0px));
+       width:60px; height:60px; border-radius:50%; border:0; background:var(--mustard); color:#24180a;
+       font-size:28px; font-weight:700; line-height:1; cursor:pointer; box-shadow:0 6px 20px #0009; }
+main { padding:16px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:16px; }
+.tile { position:relative; aspect-ratio:2/3; border-radius:0; background:var(--strip); overflow:hidden;
+        box-shadow:inset 0 0 0 1px #0006; display:flex; align-items:flex-end; cursor:pointer; }
+.tile .lbl { position:relative; z-index:2; width:100%; padding:9px 8px; font-size:12.5px; line-height:1.25;
+             background:linear-gradient(to top, #000c, #0000); text-shadow:0 1px 2px #000; }
+/* sin portada: el título es la portada — centrado, grande, que llena el azulejo */
+.tile.gen { align-items:center; justify-content:center; text-align:center; }
+.tile.gen .lbl { position:relative; z-index:2; background:none; padding:14px 12px; font-size:15px; font-weight:600;
+                 line-height:1.3; text-shadow:0 1px 3px #000; overflow:hidden;
+                 display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; }
+.tile .band { position:absolute; left:0; top:0; bottom:0; width:14%; background:var(--strip); }
+.tile .rev { position:absolute; left:0; right:0; bottom:0; height:4px; background:var(--mustard); z-index:3; }
+.tile .covbadge { position:absolute; top:6px; right:6px; z-index:4; width:24px; height:24px; border-radius:50%;
+                  background:#0009; border:1px solid var(--line); color:var(--mustard); font-size:14px; line-height:22px;
+                  text-align:center; cursor:pointer; }
+/* vista estante: un mueble continuo con perspectiva de un punto (trapecios con clip-path) */
+.shelfview { position:relative; display:flex; flex-direction:column; gap:0; width:100%;
+             background:linear-gradient(180deg, #a8681a, #8b5513); } /* panel trasero continuo */
+/* en escritorio, la balda cabe 6 libros (6x150 + 5x8 + 2x16 = 972) */
+@media (min-width:900px){ .shelfview { max-width:980px; margin:0 auto; } }
+.shelfrow { position:relative; z-index:1; display:flex; align-items:flex-end; flex-wrap:nowrap; gap:8px;
+            justify-content:space-between; padding:16px 16px 38px; min-height:150px; } /* libros repartidos, sin hueco al final */
+/* panel trasero rehundido: inset 16px para dejar ver los muros y la balda */
+.shelfrow .back-panel { position:absolute; inset:4px 16px 18px 16px; z-index:0;
+            background:repeating-linear-gradient(90deg, rgba(0,0,0,.09) 0 1px, rgba(255,255,255,.02) 1px 2px,
+                transparent 2px 6px, rgba(0,0,0,.05) 6px 7px, transparent 7px 13px,
+                rgba(0,0,0,.04) 13px 14px, transparent 14px 22px);
+            box-shadow:inset 0 5px 8px rgba(0,0,0,.45); } /* sombra pegada al canto de arriba */
+/* muros interiores: rectángulos; luz desde arriba-izquierda */
+.shelfrow .wall { position:absolute; top:0; bottom:18px; width:16px; z-index:1; }
+.shelfrow .wall-left  { left:0;  background:linear-gradient(to right, #3a2008, #7a4a14); }
+.shelfrow .wall-right { right:0; background:linear-gradient(to left, #2a1605, #5e3910); }
+/* balda: superficie recta (sin trapecio), DEBAJO de los libros */
+.shelfrow .plank-top { position:absolute; left:0; right:0; bottom:30px; height:18px; z-index:2;
+            background:
+              repeating-linear-gradient(90deg, rgba(0,0,0,.05) 0 1px, transparent 1px 4px,
+                rgba(255,255,255,.06) 4px 5px, transparent 5px 11px,
+                rgba(0,0,0,.04) 11px 13px, transparent 13px 26px),
+              linear-gradient(to bottom, #b58a4e, #e3c48c); }
+/* canto frontal: tabla de 30px del MISMO color que la superficie (luz desde arriba) */
+.shelfrow .plank-front { position:absolute; left:0; right:0; bottom:0; height:30px; z-index:4;
+            background:
+              repeating-linear-gradient(180deg, rgba(0,0,0,.10) 0 1px, rgba(255,255,255,.05) 1px 2px,
+                transparent 2px 5px, rgba(0,0,0,.06) 5px 6px, transparent 6px 11px),
+              linear-gradient(to bottom, #e8c98f 0 2px, #e3c48c 2px, #b58a4e);
+            border-top:1px solid rgba(255,235,190,.85); border-bottom:1px solid #2a1605;
+            box-shadow:0 4px 8px rgba(0,0,0,.45); } /* sombra pegada al canto: la balda sobresale */
+.shelfrow .tile { z-index:3;
+  box-shadow:inset 0 0 0 1px #0004, 3px 0 8px rgba(0,0,0,.45), 0 3px 4px rgba(0,0,0,.5); }
+.shelfrow .tile::after { content:''; position:absolute; left:0; top:0; bottom:0; width:5px; z-index:5;
+                         background:linear-gradient(90deg, #0007, transparent); } /* brillo de lomo */
+.shelfrow .tile { width:100px; }
+.shelfrow .tile.gen { width:88px; }
+@media (min-width:900px){
+  .shelfrow { min-height:225px; }
+  .shelfrow .tile { width:150px; }
+  .shelfrow .tile.gen { width:130px; }
+  .grid { grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:20px; }
+}
+/* ficha del libro: página completa centrada; el LIBRO grande es el protagonista
+   (la sinopsis vive en su contraportada, no al lado) */
+.page { max-width:880px; margin:0 auto; text-align:center; }
+.page .back { width:auto; padding:9px 14px; font-size:14px; margin:0 0 18px; text-align:left; }
+/* el «‹ Biblioteca» de la ficha y de la confirmación: relleno, no solo borde (igual que el resto) */
+.btn.ghost.back { background:var(--panel); border-color:var(--line); color:var(--ink); }
+.btn.ghost.back:active { background:var(--line); }
+.dlayout { display:flex; gap:36px; align-items:flex-start; }
+.covercol { display:flex; flex-direction:column; align-items:center; gap:12px; flex:0 0 auto; }
+.coverbtn { width:min(36vw, 330px); padding:10px 12px; font-size:14px; }
+.bcover { flex:0 0 auto; width:min(36vw, 330px); aspect-ratio:2/3; border-radius:0;
+          background-size:cover; background-position:center; border:1px solid var(--line);
+          box-shadow:0 12px 34px #0005; display:flex; align-items:flex-end; overflow:hidden; }
+.bcover .lbl { width:100%; padding:14px 12px; font-size:16px; font-weight:600; line-height:1.35; text-align:center;
+               background:linear-gradient(to top, #000c, #0000); text-shadow:0 1px 3px #000; }
+/* portada 3D: el canvas de three se estira al contenedor (2:3) y déja pasar el toque vertical.
+   Sin borde ni sombra de contenedor: la caja 3D ya da su propio volumen (y el marco
+   rectángular se vería encima del lienzo transparente). */
+.bcover3d { position:relative; border:0; box-shadow:none; }
+.cv-hint { max-width:min(36vw, 330px); text-align:center; font-size:12.5px; color:var(--dim); }
+.bcover3d canvas { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:pan-y;
+                   border-radius:inherit; }
+.burst3d { position:fixed; inset:0; z-index:40; pointer-events:none; }
+.burst3d canvas { display:block; width:100%; height:100%; }
+.dright { flex:1; min-width:0; text-align:left; }
+.btitle { font-family:ui-serif, Georgia, 'Times New Roman', serif; font-weight:700; font-size:30px;
+          line-height:1.2; margin:0 0 6px; word-break:break-word; }
+/* ficha técnica pequeña: Autor / Editorial como tabla con separador punteado, centrada */
+.dmeta { display:inline-flex; flex-direction:column; gap:4px; margin-top:10px; padding-top:12px;
+         border-top:1px dashed var(--line); text-align:left; }
+.mline { display:flex; gap:10px; font-size:14px; line-height:1.45; }
+.mk { color:var(--dim); font-size:11.5px; text-transform:uppercase; letter-spacing:.07em;
+      flex:0 0 auto; min-width:72px; padding-top:2px; }
+.mv { color:var(--ink); }
+
+/* el libro: HUGE, centrado, debajo de la ficha técnica */
+.coverbig { margin:26px auto 0; width:min(78vw, 470px); display:flex; flex-direction:column;
+            align-items:center; gap:12px; }
+/* --- ficha en el MISMO estante: estante a la izquierda, panel a la derecha --- */
+.split { display:flex; gap:26px; align-items:flex-start; }
+.split-shelf { flex:1; min-width:0; }
+.detail-panel { flex:0 0 350px; position:sticky; top:78px; max-height:calc(100dvh - 96px); overflow:auto;
+                background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:18px;
+                display:flex; flex-direction:column; gap:12px; text-align:left; }
+.detail-panel .bcover { width:100%; }
+.detail-panel .coverbtn, .detail-panel .page-foot { width:100%; }
+.panel-close { align-self:flex-end; width:34px; height:34px; border-radius:10px; border:1px solid var(--line);
+               background:var(--bg); color:var(--dim); font-size:15px; cursor:pointer; flex:0 0 auto;
+               transition:transform .14s ease; }
+.panel-close:active { transform:scale(.92); background:var(--line); }
+.ptitle { font-family:ui-serif, Georgia, 'Times New Roman', serif; font-size:22px; line-height:1.25;
+          margin:-6px 0 0; word-break:break-word; }
+.detail-panel .dmeta { margin-top:0; align-self:stretch; }
+
+/* el hueco que deja el libro "sacado" del estante: espacio vacío, sin caja */
+.tile.slot { cursor:default; background:none; border:0; box-shadow:none; }
+.shelfrow .tile.slot::after { content:none; /* el brillo de lomo de cada tile tampoco debe pintarse aquí */ }
+
+/* el libro 3D volador: overlay fijo con el Cover3D dentro, que crece de la balda al panel.
+   Es un objeto 3D desde el primer frame (sin fase "imagen → 3D"). */
+.flybook3d { position:fixed; left:0; top:0; z-index:60; pointer-events:none;
+  transition:left .42s cubic-bezier(.3,.75,.25,1), top .42s cubic-bezier(.3,.75,.25,1),
+    width .42s cubic-bezier(.3,.75,.25,1), height .42s cubic-bezier(.3,.75,.25,1), opacity .2s ease; }
+.flybook3d.fade { opacity:0; }
+.flybook3d .bcover { width:100%; height:100%; }
+.flybook3d .bcover3d canvas { pointer-events:none; }
+
+/* el panel llega CON el libro volador: oculto (opacity 0) hasta que el clon está en el aire,
+   para que nunca se vea "el libro primero y luego la ficha". */
+.detail-panel { opacity:0; pointer-events:none; transition:opacity .28s ease; }
+.detail-panel.show { opacity:1; pointer-events:auto; }
+
+/* clave: el tap en el fondo (móvil) cierra el panel */
+.panel-fade { display:none; }
+
+/* en escritorio el panel flota SIN fondo ni marco: el libro "vuela" sobre la pared.
+   En móvil (hoja inferior sobre el backdrop oscuro) sí necesita fondo para leerse. */
+@media (min-width:901px) {
+  .detail-panel { background:none; border:0; box-shadow:none; padding:18px 6px 18px 26px; }
+}
+
+@media (max-width:900px) {
+  .split { display:block; }
+  .panel-fade { display:block; position:fixed; inset:0; background:#0009; z-index:30; animation:fadeIn .18s ease; }
+  .detail-panel { position:fixed; left:10px; right:10px; bottom:10px; top:auto; z-index:40;
+                  max-height:82dvh; border-radius:20px; box-shadow:0 -14px 44px #000a; }
+}
+.blurb { margin-top:22px; font-size:15px; line-height:1.75; white-space:pre-wrap; color:var(--ink);
+         background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px 18px; }
+.blurb-label { display:block; font-size:12px; color:var(--dim); text-transform:uppercase;
+               letter-spacing:.08em; margin-bottom:8px; font-weight:600; }
+@media (max-width:640px){
+  .dlayout { flex-direction:column; align-items:center; }
+  .dright { text-align:center; }
+  .bcover, .coverbtn, .page-foot { width:62vw; }
+}
+/* estado vacío §6.2 — el mueble, vacío */
+.empty { text-align:left; padding:6px 2px 0; }
+.shelf { border:1px solid var(--line); border-radius:10px; padding:14px 12px 4px; background:#191510; }
+.shelf .row { display:flex; align-items:flex-end; gap:6px; height:66px; border-bottom:3px solid var(--line); margin-bottom:10px; }
+.shelf .lblrow { font-size:11px; color:var(--dim); letter-spacing:.06em; }
+.btn { display:block; width:100%; padding:14px 16px; border-radius:12px; border:0; font-size:16px; font-weight:600;
+       background:var(--mustard); color:#24180a; cursor:pointer; }
+.btn.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); font-weight:500; margin-top:8px; }
+.cta { margin-top:18px; }
+.gest { color:var(--dim); font-size:13px; margin-top:10px; text-align:center; }
+/* confirmación */
+.confirm { max-width:560px; }
+.cframe { display:flex; gap:16px; align-items:flex-start; }
+.ctile { width:150px; flex:0 0 auto; }
+.cmeta { flex:1; min-width:0; }
+.cmeta h2 { margin:2px 0 4px; font-size:17px; word-break:break-word; }
+.cmeta .a { color:var(--dim); font-size:13.5px; }
+.cmeta .isbn { font-family:ui-monospace,monospace; font-size:12.5px; color:var(--dim); margin-top:6px; }
+.who { font-size:12.5px; color:var(--dim); margin:10px 0 2px; }
+.input { width:100%; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--ink); font-size:16px; margin-top:12px; }
+.cvthumb { display:block; width:76px; margin:10px auto 0; border-radius:8px; border:1px solid var(--line); }
+.chiprow { display:flex; align-items:center; gap:8px; margin-top:8px; }
+.chip { font-family:ui-monospace,monospace; font-size:12.5px; padding:5px 9px; border-radius:8px;
+        border:1px solid var(--line); background:var(--bg); color:var(--ink); cursor:pointer; }
+.chip:active { background:var(--line); }
+dialog { border:0; border-radius:18px; background:var(--panel); color:var(--ink);
+         padding:0; width:min(430px, calc(100vw - 32px)); margin:auto; }
+dialog::backdrop { background:#000a; }
+.nd { padding:22px; }
+.nd-title { font-size:19px; font-weight:700; margin:0 0 16px; letter-spacing:.2px; }
+.card { display:flex; flex-direction:column; gap:4px; width:100%; padding:18px;
+        border:1px solid var(--line); border-radius:14px; background:var(--bg);
+        color:var(--ink); text-align:left; cursor:pointer; margin-bottom:16px; }
+.card:active { border-color:var(--mustard); }
+.card-t { font-size:16px; font-weight:700; }
+.card-d { font-size:13px; color:var(--dim); line-height:1.45; }
+.nd-search label { display:block; font-size:13px; color:var(--dim); margin:14px 0 4px; }
+.nd-row { display:flex; flex-direction:column; gap:8px; }
+.nd-row .input { margin-top:0; }
+.nd-row .btn { width:100%; }
+.nd-hint { font-size:12px; color:var(--dim); margin:8px 0 0; }
+@media (min-width:600px){
+  .nd-row { flex-direction:row; }
+  .nd-row .input { flex:1; }
+  .nd-row .btn { flex:0 0 130px; }
+}
+.srcs { font-size:12px; color:var(--dim); margin-top:8px; line-height:1.55; }
+.src-fix { color:var(--mustard); font-size:12.5px; font-weight:600; }
+.src-fixnote { color:var(--dim); font-size:11.5px; margin-bottom:4px; }
+.src-miss { color:var(--dim); margin-top:8px; }
+.none { color:var(--dim); font-size:13.5px; }
+.muted { color:var(--dim); }
+.hide { display:none !important; }
+/* editor de portada: recorte 2:3, con arrastrar para encuadrar y zoom */
+.cropmask { position:fixed; inset:0; z-index:40; background:#000a; display:flex; align-items:center;
+            justify-content:center; padding:16px; }
+.croppanel { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:14px;
+             padding:16px; width:min(94vw, 520px); }
+.cropbox { position:relative; overflow:hidden; width:100%; aspect-ratio:2/3; background:#000;
+           border-radius:8px; touch-action:none; cursor:grab; }
+.cropbox.pan { cursor:grabbing; }
+.cropbox img { position:absolute; top:0; left:0; transform-origin:0 0;
+               user-select:none; -webkit-user-select:none; pointer-events:none; }
+.croptools { display:flex; align-items:center; gap:10px; margin:12px 0 4px; font-size:12px; color:var(--dim); }
+.croptools input[type=range] { flex:1; accent-color:var(--mustard); }
+.cropbtns { display:flex; gap:10px; margin-top:10px; }
+.cropbtns .btn { margin:0; flex:1; }
+.spin { text-align:center; color:var(--dim); padding:48px 0; }
+.actions { display:flex; flex-direction:column; gap:10px; margin-top:16px; }
+.confirm > .back { margin-top:0; margin-bottom:14px; }
+/* teléfono: entrada a la captura abajo; acciones sobre el pliegue */
+@media (max-width:640px) {
+  .add { display:none; }
+  .fab { display:flex; align-items:center; justify-content:center; }
+  main { padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px)); }
+  .actions { position:sticky; bottom:0; background:linear-gradient(to top, var(--bg) 70%, transparent);
+             padding-bottom:calc(8px + env(safe-area-inset-bottom, 0px)); }
+  body.typing .actions { position:static; } /* teclado abierto: la barra se retira, no tapa el campo */
+}
+
+/* hover suave (solo ratón): el libro se levanta un poco y gira hacia ti, con sombra que crece.
+   La transición larga con curva suave es lo que hace el efecto "blando" — y se deshace igual
+   de suave al soltar. En táctil no hay hover: queda el feedback de presión (:active).
+   El hueco (.tile.slot) queda FUERA: es espacio vacío, no un libro. */
+@media (hover: hover) and (pointer: fine) {
+  .shelfrow .tile:not(.slot):hover,
+  .grid .tile:not(.slot):hover {
+    z-index: 6;
+    box-shadow: inset 0 0 0 1px #0005, 0 18px 30px rgba(0,0,0,.55), 0 5px 10px rgba(0,0,0,.35);
+  }
+  .shelfrow .tile:not(.slot):hover { transform: translateY(-6px) rotateY(8deg); }     /* el lomo se vuelve hacia ti */
+  .grid .tile:not(.slot):hover { transform: translateY(-6px) scale(1.03); }          /* la tapa se acerca */
+  .shelfrow .tile:not(.slot):hover:active, .grid .tile:not(.slot):hover:active { transform: translateY(-2px) scale(.97); }
+}
+
+/* --- micro-animaciones: feedback táctil en todo lo tocable --- */
+.ico, .add, .fab, .btn, .card, .chip, .tile { transition: transform .14s ease; }
+.ico:active, .chip:active { transform: scale(.9); }
+.add:active, .fab:active { transform: scale(.85); }
+.btn:active { transform: scale(.975); }
+.card:active { transform: scale(.98); }
+.tile:not(.slot):active { transform: scale(.95); }
+/* los azulejos, más largos y "blandos": con sombra incluida (hover arriba lo usa) */
+.tile { transition: transform .26s cubic-bezier(.22,.7,.25,1), box-shadow .28s ease; }
+@media (min-width:900px) { .grid .tile:hover { transform: translateY(-4px); } }
+
+/* el diálogo «＋» entra con un pop; el fondo se funde */
+dialog[open] { animation: dlgIn .22s ease backwards; }
+dialog::backdrop { animation: fadeIn .18s ease; }
+@keyframes dlgIn { from { opacity:0; transform:scale(.94) translateY(10px); } }
+@keyframes fadeIn { from { opacity:0; } }
+
+/* toast «registrado»: entra abajo, se queda 2.4 s y se va solo */
+.toast { position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom, 0px)); transform:translateX(-50%);
+  z-index:60; display:flex; align-items:center; gap:10px; max-width:min(92vw, 430px);
+  background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px 16px;
+  box-shadow:0 12px 34px #0006; font-size:14.5px;
+  animation: toastIn .3s ease, toastOut .3s ease 2.35s forwards; }
+.toast b { color:var(--mustard); }
+@keyframes toastIn { from { opacity:0; transform:translate(-50%,14px); } }
+@keyframes toastOut { to { opacity:0; transform:translate(-50%,10px); } }
+
+/* --- marco «buscando código» (viewfinder con barras + línea que barre) --- */
+.scan { display:flex; flex-direction:column; align-items:center; gap:12px; }
+.scanwrap { display:flex; justify-content:center; padding:40px 0; }
+
+/* cargador de búsqueda: mini balda con libros que entran por turnos y una línea mustard
+   que los recorre, como buscando en la propia biblioteca */
+.sloader { display:flex; flex-direction:column; align-items:center; gap:14px; }
+.sloader-books { position:relative; display:flex; align-items:flex-end; gap:5px; height:66px; padding:7px 14px 13px;
+  background:linear-gradient(180deg,#a8681a,#8b5513); border:1px solid var(--line); border-radius:12px; overflow:hidden;
+  box-shadow:inset 0 6px 10px rgba(0,0,0,.35); }
+.sloader-books::before { content:''; position:absolute; left:0; right:0; bottom:0; height:13px; z-index:2;
+  background:linear-gradient(to top,#e8c98f,#b58a4e); }
+.sbook { width:11px; height:46px; border-radius:2px; animation:sbookIn .55s cubic-bezier(.2,.8,.25,1) both; }
+.sbook-0 { background:#8a6f4d; height:38px; animation-delay:0s; }
+.sbook-1 { background:#d99a2b; height:46px; animation-delay:.15s; }
+.sbook-2 { background:#5e4632; height:32px; animation-delay:.3s; }
+.sbook-3 { background:#e3c48c; height:44px; animation-delay:.45s; }
+.sbook-4 { background:#6b5230; height:40px; animation-delay:.6s; }
+@keyframes sbookIn { from { transform:translateY(20px); opacity:0; } 60% { opacity:1; } to { transform:none; opacity:1; } }
+.sloader-line { position:absolute; top:7px; bottom:18px; left:6%; width:3px; border-radius:2px; z-index:3;
+  background:var(--mustard); box-shadow:0 0 10px 2px var(--mustard); opacity:.85;
+  animation:sline 2.4s ease-in-out infinite; }
+@keyframes sline { 0% { left:6%; } 55% { left:88%; } 100% { left:6%; } }
+.sloader-cap { font-size:13.5px; color:var(--dim); }
+.scan-box { position:relative; width:min(230px, 74vw); height:92px; border-radius:14px; overflow:hidden;
+  background:radial-gradient(120% 130% at 50% 0%, #ffffff12, #0000 60%), var(--bg);
+  border:1px solid var(--line); box-shadow: inset 0 2px 12px #0005; }
+.scan-mini { gap:0; }
+.scan-mini .scan-box { width:118px; height:52px; flex:0 0 auto; }
+/* esquinas de lector */
+.scan-box::before { content:''; position:absolute; inset:8px; background:
+    linear-gradient(var(--mustard),var(--mustard)) left top/16px 3px,
+    linear-gradient(var(--mustard),var(--mustard)) left top/3px 16px,
+    linear-gradient(var(--mustard),var(--mustard)) right top/16px 3px,
+    linear-gradient(var(--mustard),var(--mustard)) right top/3px 16px,
+    linear-gradient(var(--mustard),var(--mustard)) left bottom/16px 3px,
+    linear-gradient(var(--mustard),var(--mustard)) left bottom/3px 16px,
+    linear-gradient(var(--mustard),var(--mustard)) right bottom/16px 3px,
+    linear-gradient(var(--mustard),var(--mustard)) right bottom/3px 16px;
+  background-repeat:no-repeat; border-radius:2px; }
+.scan-bars { position:absolute; left:50%; top:50%; width:64%; height:44%; transform:translate(-50%,-50%);
+  opacity:.85; background:repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 5px,
+    var(--ink) 5px 8px, transparent 8px 13px, var(--ink) 13px 15px, transparent 15px 21px); }
+.scan-line { position:absolute; left:5%; right:5%; height:3px; border-radius:2px;
+  background:var(--mustard); box-shadow:0 0 14px 2px var(--mustard);
+  animation: scanline 1.9s ease-in-out infinite; }
+@keyframes scanline { 0%,100% { top:12%; } 50% { top:82%; } }
+.scan-q { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:28px; height:36px;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--panel); border:1px solid var(--line); border-radius:7px;
+  color:var(--dim); font-weight:700; font-size:17px; box-shadow:0 4px 14px #0005; }
+.scan-cap { font-size:13px; color:var(--dim); text-align:center; }
+.scan-row { display:flex; justify-content:center; margin-top:10px; }
+
+/* tarjeta «Escanear el lomo»: visual a la izquierda, texto a la derecha */
+.scan-card { flex-direction:row; align-items:center; gap:14px; text-align:left; }
+.scan-card-txt { display:flex; flex-direction:column; gap:4px; min-width:0; }
+
+/* selector de sección (mi estante / por comprar) */
+.seg { display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--bg); }
+.seg button { border:0; background:transparent; color:var(--dim); font:inherit; font-size:13px; padding:5px 10px; cursor:pointer; }
+.seg button.active { background:var(--mustard); color:#24180a; font-weight:600; }
+.seg button:active { filter:brightness(.92); }
+
+/* estante de compras: el MISMO mueble pero con otra madera (fría y gris) → se lee como OTRO estante */
+.shelfview.buy { background:linear-gradient(180deg, #6f5f53, #5a4c41); }
+.shelfview.buy .shelfrow .back-panel { box-shadow:inset 0 5px 8px rgba(0,0,0,.45); }
+.shelfview.buy .shelfrow .wall-left { background:linear-gradient(to right, #2c2722, #5c524b); }
+.shelfview.buy .shelfrow .wall-right { background:linear-gradient(to left, #201c18, #443c36); }
+.shelfview.buy .shelfrow .plank-top { background:
+  repeating-linear-gradient(90deg, rgba(0,0,0,.05) 0 1px, transparent 1px 4px, rgba(255,255,255,.06) 4px 5px, transparent 5px 11px, rgba(0,0,0,.04) 11px 13px, transparent 13px 26px),
+  linear-gradient(to bottom, #b3a08d, #d9c9b8); }
+.shelfview.buy .shelfrow .plank-front { background:
+  repeating-linear-gradient(180deg, rgba(0,0,0,.10) 0 1px, rgba(255,255,255,.05) 1px 2px, transparent 2px 5px, rgba(0,0,0,.06) 5px 6px, transparent 6px 11px),
+  linear-gradient(to bottom, #e4d6c6 0 2px, #d9c9b8 2px, #b3a08d);
+  border-top:1px solid rgba(255,244,232,.85); border-bottom:1px solid #201c18; }
+
+/* sello "por comprar" en las portadas y etiqueta del estante de compras */
+.wish { position:absolute; top:6px; left:6px; z-index:4; width:22px; height:22px; border-radius:50%;
+        background:#0009; border:1px solid var(--line); font-size:11px; line-height:20px;
+        text-align:center; pointer-events:none; }
+.shelf-cap { max-width:980px; margin:0 auto 10px; font-size:12.5px; color:var(--dim); }
+@media (min-width:900px){ .shelf-cap { margin-bottom:14px; } }
+
+/* acciones pequeñas bajo «＋ reemplazar portada»: rellenas (no solo borde), mitad de ancho */
+.page-foot { display:flex; gap:8px; width:min(36vw, 330px); }
+.page-foot .btn { flex:1; margin:0; padding:9px 4px; font-size:12.5px;
+                  background:var(--panel); border:1px solid var(--line); border-radius:10px; color:var(--ink); }
+.page-foot .btn:active { background:var(--line); }
+.page-foot .btn.danger { color:var(--danger);
+                         border-color:color-mix(in srgb, var(--danger) 40%, var(--line));
+                         background:color-mix(in srgb, var(--danger) 10%, var(--panel)); }
+.btn.danger { border-color:var(--danger); color:var(--danger); }
+.btn.danger:active { background:color-mix(in srgb, var(--danger) 14%, transparent); }
+.del-book { margin-top:6px; margin-bottom:16px; font-size:14px; color:var(--dim); line-height:1.5; }
+/* CTA cuando un estante está vacío: debajo del mueble real, no en su lugar */
+.empty-cta { max-width:420px; margin:28px auto 0; }
+.empty-cta .btn { margin:0; }
+.empty-cta .gest { text-align:center; }

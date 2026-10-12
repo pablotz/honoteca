@@ -1,9 +1,9 @@
 // server/api.js — rutas HTTP. Habla con la DB solo por las 4 funciones de db.js.
 import { Router } from 'express';
-import { renameSync, existsSync, mkdirSync, writeFileSync, statSync } from 'node:fs';
+import { renameSync, existsSync, mkdirSync, writeFileSync, statSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { add_book, get_book, list_books, update_book, update_title, count_generated, find_by_isbn, escalateNeedsReview, clearNeedsReview } from './db.js';
+import { add_book, get_book, list_books, update_book, update_title, count_generated, find_by_isbn, escalateNeedsReview, clearNeedsReview, remove_book } from './db.js';
 import { uploadPhoto, COVERS } from './upload.js';
 import { lookup_isbn, cover_by_title, search_by_title, gbDescription, esWikiIntro } from './meta.js';
 
@@ -102,6 +102,7 @@ api.get('/books', (req, res) => {
   if (req.query.cover_shown) filter.cover_shown = req.query.cover_shown;
   if (req.query.isbn) filter.isbn = req.query.isbn;
   if (req.query.shelf) filter.shelf = req.query.shelf;
+  if (req.query.section) filter.section = req.query.section;
   res.json(list_books(filter));
 });
 
@@ -147,6 +148,25 @@ api.patch('/books/:id', (req, res) => {
   res.json(b);
 });
 
+// Borrado: un renglón = un ejemplar. La portada (cover_front) es de la EDICIÓN: solo se
+// borra su fichero si esta era la última copia del ISBN; la foto del lomo es per-ejemplar.
+const rmFile = (rel) => {
+  if (!rel || !rel.startsWith('covers/')) return; // hotlink (cover_url) → no es fichero local
+  try {
+    const p = join(COVERS, rel.split('?')[0].slice('covers/'.length));
+    if (existsSync(p)) unlinkSync(p);
+  } catch { /* ignorar */ }
+};
+api.delete('/books/:id', (req, res) => {
+  const b = get_book(req.params.id);
+  if (!b) return res.status(404).json({ error: 'no existe' });
+  const lastCopy = !b.isbn || find_by_isbn(b.isbn).length <= 1;
+  rmFile(b.scan_back);     // foto del código de este ejemplar
+  if (lastCopy) rmFile(b.cover_front); // portada de la edición, solo si se va la última copia
+  remove_book(b.id);
+  res.json({ ok: true });
+});
+
 // --- fotos (multipart directo a disco) ------------------------------------------------
 // El scan NO escribe: aterriza la foto en covers/tmp y devuelve la lectura + las filas
 // que YA existen para ese ISBN. Crear/actualizar ocurre SOLO en /confirm con acción
@@ -159,7 +179,7 @@ api.post('/scan', uploadPhoto, (req, res) => {
   res.json({
     ticket: req.file.filename,                 // foto pendiente en covers/tmp/<ticket>
     isbn,
-    existing: isbn ? find_by_isbn(isbn) : [],  // TODAS las filas → D elige con hueco + ×N
+    existing: isbn ? find_by_isbn(isbn, body.section) : [],  // solo la sección activa (D elige con hueco)
     strip: {                                   // §5.2, ya calculado en canvas del navegador
       color: body.strip_color || null,
       present: body.strip_present === '1' || body.strip_present === 'true',
@@ -168,9 +188,9 @@ api.post('/scan', uploadPhoto, (req, res) => {
   });
 });
 
-// lookup read-only (estado D sin escribir): qué filas hay ya para un ISBN
+// lookup read-only (estado D sin escribir): qué filas hay ya de este ISBN en esta sección
 api.get('/lookup/:isbn', (req, res) => {
-  res.json({ isbn: req.params.isbn, existing: find_by_isbn(req.params.isbn) });
+  res.json({ isbn: req.params.isbn, existing: find_by_isbn(req.params.isbn, req.query.section) });
 });
 
 // metadatos por ISBN: openbd → NDL → Open Library → Google Books.
@@ -214,9 +234,9 @@ api.get('/meta/:isbn', async (req, res) => {
 const CONFIRM_ACTIONS = new Set(['update', 'create']);
 
 // §4 — frontera de campos:
-const TITLE_FIELDS = ['title_native', 'title_romaji', 'authors', 'pages',
+const TITLE_FIELDS = ['title_native', 'title_romaji', 'authors', 'pages', 'publisher',
   'cover_url', 'cover_front', 'strip_color', 'strip_present', 'mirrored', 'description'];
-const COPY_FIELDS = ['isbn', 'location', 'source', 'confidence'];
+const COPY_FIELDS = ['isbn', 'location', 'source', 'confidence', 'section'];
 function splitFields(book = {}) {
   const title = {}, perCopy = {};
   for (const f of TITLE_FIELDS) if (f in book) title[f] = book[f];

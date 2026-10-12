@@ -26,6 +26,7 @@ db.exec(`
     title_romaji  TEXT,
     authors       TEXT,              -- JSON array
     pages         INTEGER,
+    publisher     TEXT,              -- editorial (openbd/OL/Google la dan en el lookup)
     cover_url     TEXT,              -- portada hallada por lookup (openbd/OpenLibrary)
     cover_front   TEXT,              -- ruta relativa en covers/front/ (subida o manual)
     scan_back     TEXT,              -- ruta relativa en covers/back/ (foto del código+tira de lomo)
@@ -39,6 +40,7 @@ db.exec(`
     source        TEXT,              -- openbd | openlibrary | manual
     confidence    REAL,
     needs_review  INTEGER DEFAULT 0,
+    section       TEXT NOT NULL DEFAULT 'owned', -- owned | buy (estante de compras)
     created_at    TEXT DEFAULT (datetime('now')),
     updated_at    TEXT DEFAULT (datetime('now'))
   );
@@ -50,6 +52,9 @@ db.exec(`
 
 // descripción: la captura las fuentes que la dan (googlebooks); para bibliotecas ya creadas
 try { db.exec('ALTER TABLE books ADD COLUMN description TEXT'); } catch { /* ya existe */ }
+// section (owned|buy): bibliotecas viejas quedan en 'owned'
+try { db.exec("ALTER TABLE books ADD COLUMN section TEXT NOT NULL DEFAULT 'owned'"); } catch { /* ya existe */ }
+try { db.exec('ALTER TABLE books ADD COLUMN publisher TEXT'); } catch { /* ya existe */ }
 
 // ---- resolución de la cara mostrada -------------------------------------------------
 // DERIVADO de (cover_front, cover_url). Guardarraíl: NUNCA lo escribe el cliente.
@@ -84,7 +89,9 @@ function rowToBook(row) {
     source: row.source,
     confidence: row.confidence,
     description: row.description ?? null,
+    publisher: row.publisher ?? null,
     needs_review: !!row.needs_review,
+    section: row.section || 'owned',
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -100,10 +107,10 @@ const coverVer = (rel) => { try { return statSync(join(root, rel)).mtimeMs; } ca
 const withVer = (rel) => (rel ? `${rel}?v=${coverVer(rel)}` : rel);
 
 const FIELDS = [
-  'id', 'isbn', 'title_native', 'title_romaji', 'authors', 'pages',
+  'id', 'isbn', 'title_native', 'title_romaji', 'authors', 'pages', 'publisher',
   'cover_url', 'cover_front', 'scan_back', 'strip_color', 'strip_present',
   'mirrored', 'location_shelf', 'location_row', 'location_pos',
-  'source', 'confidence', 'description',
+  'source', 'confidence', 'description', 'section',
 ]; // needs_review NO está aquí: es de un solo escritor (escalate/clear), no de un patch genérico
 
 function toColumns(book) {
@@ -173,6 +180,7 @@ export function list_books(filter = {}) {
   if (filter.cover_shown) { where.push('b.cover_shown=?'); args.push(filter.cover_shown); }
   if (filter.isbn) { where.push('b.isbn=?'); args.push(cleanIsbn(filter.isbn)); }
   if (filter.shelf) { where.push('b.location_shelf=?'); args.push(filter.shelf); }
+  if (filter.section) { where.push('b.section=?'); args.push(filter.section); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY b.location_shelf, b.location_row, b.location_pos, b.created_at';
   return db.prepare(sql).all(...args).map(rowToBook);
@@ -201,7 +209,7 @@ export function update_book(id, patch) {
 // tus tres 雪国 podrían acabar con 610 y 612 páginas y el lomo saldría de dos anchos.
 // Per-ejemplar (NO aquí): location, scan_back, source, confidence.
 const TITLE_FIELDS = [
-  'title_native', 'title_romaji', 'authors', 'pages',
+  'title_native', 'title_romaji', 'authors', 'pages', 'publisher',
   'cover_url', 'cover_front', 'strip_color', 'strip_present', 'mirrored', 'needs_review', 'description',
 ];
 export function update_title(isbn, patch) {
@@ -244,8 +252,19 @@ export function count_generated() {
 
 // TODOS los renglones de un ISBN (estado D: 2, 3, N ejemplares del mismo título — cada
 // renglón es un ejemplar físico con su propia location; el ×N se deriva de cuántos son).
-export function find_by_isbn(isbn) {
-  return db.prepare(`${SELECT_BOOK} WHERE b.isbn=? ORDER BY b.created_at`).all(cleanIsbn(isbn)).map(rowToBook);
+// `section` opcional: en el estante de compras, un ejemplar que ya tienes NO debe contarse
+// como "ya lo tienes" — las secciones son listas independientes.
+export function find_by_isbn(isbn, section) {
+  const args = [cleanIsbn(isbn)];
+  let extra = '';
+  if (section) { extra = ' AND b.section=?'; args.push(section); }
+  return db.prepare(`${SELECT_BOOK} WHERE b.isbn=?${extra} ORDER BY b.created_at`).all(...args).map(rowToBook);
+}
+
+// Un renglón = un ejemplar físico. La limpieza de archivos (portada/foto) la decide api.js
+// (depende de si era la última copia del ISBN, y ahí sí ve el contexto completo).
+export function remove_book(id) {
+  return db.prepare('DELETE FROM books WHERE id=?').run(id).changes > 0;
 }
 
 export const _db_path = DB_PATH;

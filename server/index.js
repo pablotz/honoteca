@@ -1,4 +1,5 @@
-// server/index.js — arranque. Express sirve public/ tal cual (sin build) + /api.
+// server/index.js — arranque. Express sirve dist/ (build de Vite) + /api.
+// Dev: `npm run dev` (Vite con HMR, proxy a este server). Prod: `npm run build` + `npm start`.
 // Contrato Nihongo: bind 0.0.0.0:8848 → PC y celular comparten la biblioteca por la LAN.
 import express from 'express';
 import { join, dirname } from 'node:path';
@@ -9,6 +10,7 @@ import { purgeTmp } from './upload.js';
 import { _db_path } from './db.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const DIST = join(root, 'dist');
 
 // .env opcional (Node ≥20.12): GOOGLE_BOOKS_API_KEY, PORT, HOST… No pisa lo ya exportado.
 const envFile = join(root, '.env');
@@ -29,16 +31,20 @@ app.use('/covers', express.static(join(root, 'covers'), {
   setHeaders: (res) => res.setHeader('Cache-Control', 'no-store'),
 }));
 app.use('/api', api);
-app.use(express.static(join(root, 'public'), {
+app.use(express.static(DIST, {
   setHeaders: (res, p) => { if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-store'); },
-})); // index.html + app.js + vendor/ (el HTML, sin caché: siempre el CSS/HTML vivo)
+})); // index.html + assets + vendor/ (lo que Vite copia de public/). El HTML, sin caché: siempre vivo.
 
 purgeTmp(); // limpia fotos huérfanas >24h al arrancar
 
 app.get('/health', (_req, res) => res.json({ ok: true, db: _db_path }));
 
+if (!existsSync(DIST)) {
+  console.warn('[biblioteca] falta dist/ — corre `npm run build`, o usa `npm run dev` (Vite) + `npm run dev:api`.');
+}
+
 app.listen(PORT, HOST, () => {
   console.log(`Biblioteca — http://${HOST}:${PORT}`);
   console.log(`  db:     ${_db_path}`);
-  console.log(`  static: ${join(root, 'public')}`);
+  console.log(`  static: ${DIST}`);
 });

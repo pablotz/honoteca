@@ -3,22 +3,31 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Biblioteca — shelf scanner + 3D/2D wall library (LAN, phone + PC)",
+  "description": "Biblioteca — shelf scanner + 2D wall library (LAN, phone + PC)",
   "engines": {
-    "node": ">=18"
+    "node": ">=22.12"
   },
   "scripts": {
+    "dev": "vite",
+    "dev:api": "node server/index.js",
+    "build": "vite build",
+    "preview": "vite preview",
     "start": "node server/index.js",
     "vendor": "node scripts/vendor.mjs",
-    "postinstall": "node scripts/vendor.mjs"
+    "postinstall": "node scripts/vendor.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "express": "5.3.0",
-    "multer": "2.4.0"
+    "multer": "2.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zxing-wasm": "3.1.5"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.2",
     "tesseract.js": "^7.0.0",
     "three": "0.186.1",
-    "zxing-wasm": "3.1.5"
+    "vite": "^8.3.4"
   }
 }
