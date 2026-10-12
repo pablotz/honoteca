@@ -3,7 +3,7 @@ import Cover3D from './Cover3D.jsx';
 
 // Panel lateral: el libro se "saca" del estante (deja un hueco) y aterriza aquí, a la derecha
 // de la biblioteca, con todas sus opciones. Cerrar = volver a la balda (el libro "vuela" al morf).
-export default function BookDetail({ book, visible, morph, onBack, onAddCover, onDelete, onMove }) {
+export default function BookDetail({ book, visible, morph, onBack, onAddCover, onDelete, onMove, onRetryCover }) {
   const ttl = displayTitle(book);
   const hasCover = !!(book.cover_front || book.cover_url);
   const au = displayAuthor(book);
@@ -30,6 +30,9 @@ export default function BookDetail({ book, visible, morph, onBack, onAddCover, o
           <button type="button" className="btn coverbtn" onClick={() => onAddCover(book.id)}>
             {hasCover ? '＋ reemplazar portada' : '＋ subir portada'}
           </button>
+          {!hasCover && book.isbn && (
+            <button type="button" className="retry-cover" onClick={() => onRetryCover(book)}>＋ intentar portada online</button>
+          )}
           <div className="page-foot">
             <button
               type="button" className="btn"

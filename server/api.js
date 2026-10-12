@@ -193,22 +193,43 @@ api.get('/lookup/:isbn', (req, res) => {
   res.json({ isbn: req.params.isbn, existing: find_by_isbn(req.params.isbn, req.query.section) });
 });
 
+// Portada LOCAL si la fuente no trae hotlink: EXACTO por ISBN primero (OL y El Sótano),
+// y la búsqueda por TÍTULO como última red (puede ser otra edición). Devuelve 'covers/front/…'
+// o null. Sirve tanto para /meta como para el reintento de portada (POST /books/:id/cover).
+async function coverForHit(hit, isbn) {
+  if (!hit || !isbn || hit.cover_url) return null;
+  const exact = (await olCoverFallback(isbn)) || (await elSotanoCover(isbn));
+  if (exact) return exact;
+  const url = await cover_by_title(hit.title_native, hit.authors?.[0]);
+  return url ? await cacheCover(isbn, url) : null;
+}
+
+// Reintento de portada para un libro que quedó sin tapa: vuelve a consultar los catálogos
+// AHORA (OL puede haber indexado la edición desde entonces) y, si aparece, actualiza TODAS
+// las copias del ISBN (cover_front es de la edición → update_title).
+api.post('/books/:id/cover', async (req, res) => {
+  try {
+    const b = get_book(req.params.id);
+    if (!b) return res.status(404).json({ error: 'no existe' });
+    if (!b.isbn) return res.status(400).json({ error: 'sin ISBN no hay portada que buscar' });
+    const { hit } = await lookup_isbn(b.isbn);
+    const cover = await coverForHit(hit, b.isbn);
+    if (cover) update_title(b.isbn, { cover_front: cover });
+    else if (hit && hit.cover_url) update_title(b.isbn, { cover_url: hit.cover_url });
+    res.json({ ok: true, cover, book: get_book(b.id) });
+  } catch (e) {
+    res.status(502).json({ error: String(e.message || e) });
+  }
+});
+
 // metadatos por ISBN: openbd → NDL → Open Library → Google Books.
 // Siempre 200: devuelve hit (o null) + el reporte por fuente (hit/miss/skipped/error),
 // para que «no lo tiene» y «no se pudo preguntar» no se lean igual.
 api.get('/meta/:isbn', async (req, res) => {
   try {
     const { hit, isbn, report } = await lookup_isbn(req.params.isbn);
-    // Portadas: openbd/OL traen hotlink estable; si no, EXACTO por ISBN primero (OL y
-    // El Sótano), y la búsqueda por TÍTULO como última red (puede ser otra edición).
     if (hit) {
-      if (!hit.cover_url) {
-        hit.cover_front = await olCoverFallback(isbn) || await elSotanoCover(isbn);
-        if (!hit.cover_front) {
-          const url = await cover_by_title(hit.title_native, hit.authors?.[0]);
-          hit.cover_front = url ? await cacheCover(isbn, url) : null;
-        }
-      }
+      hit.cover_front = await coverForHit(hit, isbn);
       if (hit.cover_front) hit.cover_front = verPath(hit.cover_front);
       // sinopsis en el idioma de la edición (ES para ejemplares en español): Google primero
       // (cuota), Wikipedia en español como red. Deja la de OL solo si ambas fallan.

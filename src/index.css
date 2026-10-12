@@ -143,6 +143,10 @@ main { padding:16px; }
                 display:flex; flex-direction:column; gap:12px; text-align:left; }
 .detail-panel .bcover { width:100%; }
 .detail-panel .coverbtn, .detail-panel .page-foot { width:100%; }
+.retry-cover { width:100%; margin:0; padding:9px 10px; font-size:12.5px;
+               background:var(--panel); border:1px solid var(--line); border-radius:10px; color:var(--dim); cursor:pointer;
+               transition:transform .14s ease; }
+.retry-cover:active { transform:scale(.98); background:var(--line); }
 .panel-close { align-self:flex-end; width:34px; height:34px; border-radius:10px; border:1px solid var(--line);
                background:var(--bg); color:var(--dim); font-size:15px; cursor:pointer; flex:0 0 auto;
                transition:transform .14s ease; }
@@ -246,6 +250,9 @@ dialog::backdrop { background:#000a; }
 .none { color:var(--dim); font-size:13.5px; }
 .muted { color:var(--dim); }
 .hide { display:none !important; }
+/* inputs de archivo ocultos: NO display:none (algunos navegadores ignoran input.click() así).
+   Se ocultan visualmente pero siguen "presentes" para que el picker abra siempre. */
+.filehidden { position:fixed; left:0; top:0; width:1px; height:1px; opacity:0; pointer-events:none; }
 /* editor de portada: recorte 2:3, con arrastrar para encuadrar y zoom */
 .cropmask { position:fixed; inset:0; z-index:40; background:#000a; display:flex; align-items:center;
             justify-content:center; padding:16px; }

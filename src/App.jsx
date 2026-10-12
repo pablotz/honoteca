@@ -288,6 +288,15 @@ export default function App() {
   const backToStart = () => { setSessionBoth(null); setConfirmState(null); setBusy(null); setDialogOpen(true); };
   const doneExisting = () => { if (sessionRef.current?._modal) setDialogOpen(false); goLibrary(); };
 
+  const retryCover = async (book) => {
+    setBusy({ text: 'buscando portada…', modal: false, search: true });
+    try {
+      const r = await fetch(`/api/books/${book.id}/cover`, { method: 'POST' }).then((x) => x.json());
+      goLibrary();
+      showToast('info', displayTitle(book), r.cover ? '¡portada encontrada!' : 'sin portada online · puedes subirla tú');
+    } catch { setBusy(null); showToast('info', displayTitle(book), 'no se pudo buscar la portada'); }
+  };
+
   const modal = !!session?._modal;
   const mainBusy = busy && !busy.modal;
   const dialogBusy = busy && busy.modal;
@@ -338,7 +347,7 @@ export default function App() {
           : detail ? (
             <div className="split">
               <div className="split-shelf">{libraryView}</div>
-              <BookDetail book={detail} visible={panelShow} morph={matchMedia('(min-width:900px)').matches} onBack={() => vtx(goLibrary)} onAddCover={addCoverTo} onDelete={setDeleteTarget} onMove={moveSection} />
+              <BookDetail book={detail} visible={panelShow} morph={matchMedia('(min-width:900px)').matches} onBack={() => vtx(goLibrary)} onAddCover={addCoverTo} onDelete={setDeleteTarget} onMove={moveSection} onRetryCover={retryCover} />
             </div>
           )
           : libraryView}
@@ -351,18 +360,19 @@ export default function App() {
 
       {toast && (
         <div className="toast" role="status">
-          <span aria-hidden="true">{toast.kind === 'add' ? '🎉' : toast.kind === 'remove' ? '🗑️' : toast.kind === 'remove-fail' ? '⚠️' : '⇄'}</span>
+          <span aria-hidden="true">{toast.kind === 'add' ? '🎉' : toast.kind === 'remove' ? '🗑️' : toast.kind === 'remove-fail' ? '⚠️' : toast.kind === 'info' ? '🖼️' : '⇄'}</span>
           {toast.kind === 'add' ? <span>¡<b>{toast.title}</b> registrado!</span>
             : toast.kind === 'remove' ? <span><b>{toast.title}</b> eliminado</span>
             : toast.kind === 'remove-fail' ? <span>no se pudo eliminar · inténtalo de nuevo</span>
+            : toast.kind === 'info' ? <span><b>{toast.title}</b> — {toast.note}</span>
             : <span><b>{toast.title}</b> → {toast.note}</span>}
         </div>
       )}
       {toast?.kind === 'add' && <Burst3D key={toast.id} />}
 
-      <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hide"
+      <input ref={photoRef} type="file" accept="image/*" capture="environment" className="filehidden"
         onChange={(e) => onPhoto(e.target.files[0])} />
-      <input ref={coverRef} type="file" accept="image/*" className="hide"
+      <input ref={coverRef} type="file" accept="image/*" className="filehidden"
         onChange={(e) => { const f = e.target.files[0]; if (f) coverActionRef.current?.(f); }} />
 
       <AddDialog
