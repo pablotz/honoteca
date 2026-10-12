@@ -1,0 +1,12 @@
+covers/back/*
+covers/front/*
+covers/tmp/*
+!covers/**/.gitkeep
+state/*.db
+state/*.db-wal
+state/*.db-shm
+node_modules/
+.env
+dist/
+public/vendor/
+.playwright-mcp/

@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Biblioteca</title>
+  <style>
+    :root { color-scheme: dark;
+      --bg:#14110e; --panel:#1d1913; --line:#2c2620; --ink:#eee6da; --dim:#9a8f80;
+      --mustard:#d99a2b; --strip:#3a332a; --plank:#1d1913; --plankhi:#41382c; --wood:#241b13; --woodhi:#2f2319;
+      --wood1:#241708; --wood2:#150d05; }
+    :root[data-theme="sepia"] { color-scheme: light;
+      --bg:#f2e6d0; --panel:#eadac0; --line:#d2bfa0; --ink:#3a2f23; --dim:#8d7c64;
+      --mustard:#a06b20; --strip:#8a6f4d; --plank:#cfb287; --plankhi:#e6d3ae; --wood:#cfb287; --woodhi:#e4cda4;
+      --wood1:#e7d9bc; --wood2:#ddcdae; }
+    :root[data-theme="light"] { color-scheme: light;
+      --bg:#f6f4ef; --panel:#ffffff; --line:#e0dad0; --ink:#1f1c18; --dim:#7f766b;
+      --mustard:#a8710a; --strip:#8d8373; --plank:#e0d8ca; --plankhi:#f1ebdf; --wood:#e7dfd0; --woodhi:#f3eddf;
+      --wood1:#f1ece1; --wood2:#eae3d5; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:15px/1.5 system-ui, -apple-system, sans-serif; color:var(--ink);
+           /* pared de tablones, más oscura que el estante */
+           background:
+             repeating-linear-gradient(90deg, rgba(0,0,0,.22) 0 1px, transparent 1px 7px,
+               rgba(255,255,255,.02) 7px 8px, transparent 8px 21px),
+             repeating-linear-gradient(180deg, var(--wood1) 0 44px, var(--wood2) 44px 47px),
+             var(--bg);
+           background-attachment: fixed;
+           -webkit-tap-highlight-color: transparent; }
+    header { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; gap:12px; align-items:center;
+             padding:11px 16px; background:var(--panel); border-bottom:1px solid var(--line); }
+    .brand { font-weight:700; letter-spacing:.3px; }
+    .ico { width:36px; height:36px; border-radius:10px; border:1px solid var(--line); background:var(--bg);
+           color:var(--dim); font-size:17px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    .ico.active { color:var(--mustard); border-color:var(--mustard); background:var(--line); }
+    .ico:active { background:var(--line); }
+    .grow { flex:1; }
+    .perrow { display:flex; align-items:center; gap:5px; margin-left:6px; font-size:12px; color:var(--dim); }
+    .perrow input { width:88px; accent-color:var(--mustard); cursor:pointer; }
+    .perrow b { min-width:12px; text-align:center; }
+    .add { margin-left:10px; width:38px; height:38px; border-radius:50%; border:0; background:var(--mustard); color:#24180a;
+           font-size:20px; font-weight:700; line-height:1; cursor:pointer; flex:0 0 auto; }
+    /* FAB: en teléfono el punto de entrada a la captura vive ABAJO (pulgar) — §6 */
+    .fab { display:none; position:fixed; z-index:20; right:18px; bottom:calc(18px + env(safe-area-inset-bottom, 0px));
+           width:60px; height:60px; border-radius:50%; border:0; background:var(--mustard); color:#24180a;
+           font-size:28px; font-weight:700; line-height:1; cursor:pointer; box-shadow:0 6px 20px #0009; }
+    main { padding:16px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:16px; }
+    .tile { position:relative; aspect-ratio:2/3; border-radius:0; background:var(--strip); overflow:hidden;
+            box-shadow:inset 0 0 0 1px #0006; display:flex; align-items:flex-end; cursor:pointer; }
+.tile .lbl { position:relative; z-index:2; width:100%; padding:9px 8px; font-size:12.5px; line-height:1.25;
+             background:linear-gradient(to top, #000c, #0000); text-shadow:0 1px 2px #000; }
+    /* sin portada: el título es la portada — centrado, grande, que llena el azulejo */
+    .tile.gen { align-items:center; justify-content:center; text-align:center; }
+    .tile.gen .lbl { position:relative; z-index:2; background:none; padding:14px 12px; font-size:15px; font-weight:600;
+                     line-height:1.3; text-shadow:0 1px 3px #000; overflow:hidden;
+                     display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; }
+    .tile .band { position:absolute; left:0; top:0; bottom:0; width:14%; background:var(--strip); }
+    .tile .rev { position:absolute; left:0; right:0; bottom:0; height:4px; background:var(--mustard); z-index:3; }
+    .tile .covbadge { position:absolute; top:6px; right:6px; z-index:4; width:24px; height:24px; border-radius:50%;
+                      background:#0009; border:1px solid var(--line); color:var(--mustard); font-size:14px; line-height:22px;
+                      text-align:center; cursor:pointer; }
+    /* vista estante: un mueble continuo con perspectiva de un punto (trapecios con clip-path) */
+    .shelfview { position:relative; display:flex; flex-direction:column; gap:0; width:100%;
+                 background:linear-gradient(180deg, #a8681a, #8b5513); } /* panel trasero continuo */
+    /* en escritorio, la balda cabe 6 libros (6x150 + 5x8 + 2x16 = 972) */
+    @media (min-width:900px){ .shelfview { max-width:980px; margin:0 auto; } }
+    .shelfrow { position:relative; z-index:1; display:flex; align-items:flex-end; flex-wrap:nowrap; gap:8px;
+                justify-content:space-between; padding:16px 16px 38px; min-height:150px; } /* libros repartidos, sin hueco al final */
+    /* panel trasero rehundido: inset 16px para dejar ver los muros y la balda */
+    .shelfrow .back-panel { position:absolute; inset:4px 16px 18px 16px; z-index:0;
+                background:repeating-linear-gradient(90deg, rgba(0,0,0,.09) 0 1px, rgba(255,255,255,.02) 1px 2px,
+                    transparent 2px 6px, rgba(0,0,0,.05) 6px 7px, transparent 7px 13px,
+                    rgba(0,0,0,.04) 13px 14px, transparent 14px 22px);
+                box-shadow:inset 0 5px 8px rgba(0,0,0,.45); } /* sombra pegada al canto de arriba */
+    /* muros interiores: rectángulos; luz desde arriba-izquierda */
+    .shelfrow .wall { position:absolute; top:0; bottom:18px; width:16px; z-index:1; }
+    .shelfrow .wall-left  { left:0;  background:linear-gradient(to right, #3a2008, #7a4a14); }
+    .shelfrow .wall-right { right:0; background:linear-gradient(to left, #2a1605, #5e3910); }
+    /* balda: superficie recta (sin trapecio), DEBAJO de los libros */
+    .shelfrow .plank-top { position:absolute; left:0; right:0; bottom:30px; height:18px; z-index:2;
+                background:
+                  repeating-linear-gradient(90deg, rgba(0,0,0,.05) 0 1px, transparent 1px 4px,
+                    rgba(255,255,255,.06) 4px 5px, transparent 5px 11px,
+                    rgba(0,0,0,.04) 11px 13px, transparent 13px 26px),
+                  linear-gradient(to bottom, #b58a4e, #e3c48c); }
+    /* canto frontal: tabla de 30px del MISMO color que la superficie (luz desde arriba) */
+    .shelfrow .plank-front { position:absolute; left:0; right:0; bottom:0; height:30px; z-index:4;
+                background:
+                  repeating-linear-gradient(180deg, rgba(0,0,0,.10) 0 1px, rgba(255,255,255,.05) 1px 2px,
+                    transparent 2px 5px, rgba(0,0,0,.06) 5px 6px, transparent 6px 11px),
+                  linear-gradient(to bottom, #e8c98f 0 2px, #e3c48c 2px, #b58a4e);
+                border-top:1px solid rgba(255,235,190,.85); border-bottom:1px solid #2a1605;
+                box-shadow:0 4px 8px rgba(0,0,0,.45); } /* sombra pegada al canto: la balda sobresale */
+    .shelfrow .tile { z-index:3;
+      box-shadow:inset 0 0 0 1px #0004, 3px 0 8px rgba(0,0,0,.45), 0 3px 4px rgba(0,0,0,.5); }
+    .shelfrow .tile::after { content:''; position:absolute; left:0; top:0; bottom:0; width:5px; z-index:5;
+                             background:linear-gradient(90deg, #0007, transparent); } /* brillo de lomo */
+    .shelfrow .tile { width:100px; }
+    .shelfrow .tile.gen { width:88px; }
+    @media (min-width:900px){
+      .shelfrow { min-height:225px; }
+      .shelfrow .tile { width:150px; }
+      .shelfrow .tile.gen { width:130px; }
+      .grid { grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:20px; }
+    }
+    /* ficha del libro: portada a la izquierda, título y texto a la derecha */
+    .page { max-width:880px; margin:0 auto; }
+    .page .back { width:auto; padding:9px 14px; font-size:14px; margin:0 0 18px; }
+    .dlayout { display:flex; gap:36px; align-items:flex-start; }
+    .covercol { display:flex; flex-direction:column; align-items:center; gap:12px; flex:0 0 auto; }
+    .coverbtn { width:min(36vw, 330px); padding:10px 12px; font-size:14px; }
+    .bcover { flex:0 0 auto; width:min(36vw, 330px); aspect-ratio:2/3; border-radius:0;
+              background-size:cover; background-position:center; border:1px solid var(--line);
+              box-shadow:0 12px 34px #0005; display:flex; align-items:flex-end; overflow:hidden; }
+    .bcover .lbl { width:100%; padding:14px 12px; font-size:16px; font-weight:600; line-height:1.35; text-align:center;
+                   background:linear-gradient(to top, #000c, #0000); text-shadow:0 1px 3px #000; }
+    .dright { flex:1; min-width:0; text-align:left; }
+    .btitle { font-family:ui-serif, Georgia, 'Times New Roman', serif; font-weight:700; font-size:30px;
+              line-height:1.2; margin:0 0 6px; word-break:break-word; }
+    .bauthor { color:var(--dim); font-size:15px; margin-bottom:10px; }
+    .blurb { margin-top:16px; font-size:15px; line-height:1.7; white-space:pre-wrap; color:var(--ink); }
+    @media (max-width:640px){
+      .dlayout { flex-direction:column; align-items:center; }
+      .dright { text-align:center; }
+      .bcover, .coverbtn { width:62vw; }
+    }
+    /* estado vacío §6.2 — el mueble, vacío */
+    .empty { text-align:left; padding:6px 2px 0; }
+    .shelf { border:1px solid var(--line); border-radius:10px; padding:14px 12px 4px; background:#191510; }
+    .shelf .row { display:flex; align-items:flex-end; gap:6px; height:66px; border-bottom:3px solid var(--line); margin-bottom:10px; }
+    .shelf .lblrow { font-size:11px; color:var(--dim); letter-spacing:.06em; }
+    .btn { display:block; width:100%; padding:14px 16px; border-radius:12px; border:0; font-size:16px; font-weight:600;
+           background:var(--mustard); color:#24180a; cursor:pointer; }
+    .btn.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); font-weight:500; margin-top:8px; }
+    .cta { margin-top:18px; }
+    .gest { color:var(--dim); font-size:13px; margin-top:10px; text-align:center; }
+    /* confirmación */
+    .confirm { max-width:560px; }
+    .cframe { display:flex; gap:16px; align-items:flex-start; }
+    .ctile { width:150px; flex:0 0 auto; }
+    .cmeta { flex:1; min-width:0; }
+    .cmeta h2 { margin:2px 0 4px; font-size:17px; word-break:break-word; }
+    .cmeta .a { color:var(--dim); font-size:13.5px; }
+    .cmeta .isbn { font-family:ui-monospace,monospace; font-size:12.5px; color:var(--dim); margin-top:6px; }
+    .who { font-size:12.5px; color:var(--dim); margin:10px 0 2px; }
+    .input { width:100%; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--ink); font-size:16px; margin-top:12px; }
+    .cvthumb { display:block; width:76px; margin:10px auto 0; border-radius:8px; border:1px solid var(--line); }
+    .chiprow { display:flex; align-items:center; gap:8px; margin-top:8px; }
+    .chip { font-family:ui-monospace,monospace; font-size:12.5px; padding:5px 9px; border-radius:8px;
+            border:1px solid var(--line); background:var(--bg); color:var(--ink); cursor:pointer; }
+    .chip:active { background:var(--line); }
+    dialog { border:0; border-radius:18px; background:var(--panel); color:var(--ink);
+             padding:0; width:min(430px, calc(100vw - 32px)); margin:auto; }
+    dialog::backdrop { background:#000a; }
+    .nd { padding:22px; }
+    .nd-title { font-size:19px; font-weight:700; margin:0 0 16px; letter-spacing:.2px; }
+    .card { display:flex; flex-direction:column; gap:4px; width:100%; padding:18px;
+            border:1px solid var(--line); border-radius:14px; background:var(--bg);
+            color:var(--ink); text-align:left; cursor:pointer; margin-bottom:16px; }
+    .card:active { border-color:var(--mustard); }
+    .card-t { font-size:16px; font-weight:700; }
+    .card-d { font-size:13px; color:var(--dim); line-height:1.45; }
+    .nd-search label { display:block; font-size:13px; color:var(--dim); margin:14px 0 4px; }
+    .nd-row { display:flex; flex-direction:column; gap:8px; }
+    .nd-row .input { margin-top:0; }
+    .nd-row .btn { width:100%; }
+    .nd-hint { font-size:12px; color:var(--dim); margin:8px 0 0; }
+    @media (min-width:600px){
+      .nd-row { flex-direction:row; }
+      .nd-row .input { flex:1; }
+      .nd-row .btn { flex:0 0 130px; }
+    }
+    .srcs { font-size:12px; color:var(--dim); margin-top:8px; line-height:1.55; }
+    .src-fix { color:var(--mustard); font-size:12.5px; font-weight:600; }
+    .src-fixnote { color:var(--dim); font-size:11.5px; margin-bottom:4px; }
+    .src-miss { color:var(--dim); margin-top:8px; }
+    .none { color:var(--dim); font-size:13.5px; }
+    .muted { color:var(--dim); }
+    .hide { display:none !important; }
+    /* editor de portada: recorte 2:3, con arrastrar para encuadrar y zoom */
+    .cropmask { position:fixed; inset:0; z-index:40; background:#000a; display:flex; align-items:center;
+                justify-content:center; padding:16px; }
+    .croppanel { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:14px;
+                 padding:16px; width:min(94vw, 520px); }
+    .cropbox { position:relative; overflow:hidden; width:100%; aspect-ratio:2/3; background:#000;
+               border-radius:8px; touch-action:none; cursor:grab; }
+    .cropbox.pan { cursor:grabbing; }
+    .cropbox img { position:absolute; top:0; left:0; transform-origin:0 0;
+                   user-select:none; -webkit-user-select:none; pointer-events:none; }
+    .croptools { display:flex; align-items:center; gap:10px; margin:12px 0 4px; font-size:12px; color:var(--dim); }
+    .croptools input[type=range] { flex:1; accent-color:var(--mustard); }
+    .cropbtns { display:flex; gap:10px; margin-top:10px; }
+    .cropbtns .btn { margin:0; flex:1; }
+    .spin { text-align:center; color:var(--dim); padding:48px 0; }
+    .actions { display:flex; flex-direction:column; gap:10px; margin-top:16px; }
+    .confirm > .back { margin-top:0; margin-bottom:14px; }
+    /* teléfono: entrada a la captura abajo; acciones sobre el pliegue */
+    @media (max-width:640px) {
+      .add { display:none; }
+      .fab { display:flex; align-items:center; justify-content:center; }
+      main { padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px)); }
+      .actions { position:sticky; bottom:0; background:linear-gradient(to top, var(--bg) 70%, transparent);
+                 padding-bottom:calc(8px + env(safe-area-inset-bottom, 0px)); }
+      body.typing .actions { position:static; } /* teclado abierto: la barra se retira, no tapa el campo */
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <button type="button" class="ico active" id="viewShelf" title="Estante">≡</button>
+    <button type="button" class="ico" id="viewGrid" title="Cuadrícula">▦</button>
+    <button type="button" class="ico" id="themeBtn" title="Tema: oscuro">◐</button>
+    <label class="perrow" title="libros por balda">
+      <input type="range" id="perRow" min="3" max="12" step="1">
+      <b id="perRowVal">6</b>
+    </label>
+    <span class="grow"></span>
+    <button class="add" id="add" title="Escanear un libro">＋</button>
+  </header>
+  <main id="view"></main>
+  <button class="fab" id="fab" aria-label="Escanear un libro">＋</button>
+  <input id="photo" type="file" accept="image/*" capture="environment" class="hide" />
+  <input id="cover" type="file" accept="image/*" class="hide" />
+  <dialog id="new">
+    <div class="nd" id="ndStart">
+      <h2 class="nd-title">Agregar un libro</h2>
+      <button type="button" class="card" id="optScan">
+        <span class="card-t">Escanear el lomo</span>
+        <span class="card-d">una foto del código de barras → datos, portada y sinopsis solos</span>
+      </button>
+      <div class="nd-search">
+        <label for="newTitle">…o búscalo por nombre o ISBN</label>
+        <div class="nd-row">
+          <input id="newTitle" class="input" placeholder="ej. Hábitos atómicos" autocomplete="off" />
+          <button type="button" class="btn" id="optSearch">Buscar</button>
+        </div>
+        <p class="nd-hint">Sirve el título del libro o un ISBN de 10/13 dígitos.</p>
+      </div>
+    </div>
+    <div class="nd hide" id="ndRes"></div>
+  </dialog>
+  <script src="/vendor/tesseract/tesseract.min.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
