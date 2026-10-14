@@ -33,6 +33,7 @@ header { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; gap:12
                                             color-mix(in srgb, var(--room2) 82%, #000 18%));
          border-bottom:1px solid rgba(0,0,0,.5); box-shadow:0 6px 16px rgba(0,0,0,.35); }
 .brand { font-weight:700; letter-spacing:.3px; }
+.brand-ico { width:36px; height:36px; border-radius:9px; object-fit:cover; box-shadow:0 2px 6px rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.12); flex:0 0 auto; }
 .ico { width:36px; height:36px; border-radius:10px; border:1px solid var(--line); background:var(--bg);
        color:var(--dim); font-size:17px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
 .ico.active { color:var(--mustard); border-color:var(--mustard); background:var(--line); }

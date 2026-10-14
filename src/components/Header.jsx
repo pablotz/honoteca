@@ -3,6 +3,7 @@
 export default function Header({ view, onView, theme, onCycleTheme, section, onSection, perRow, maxPerRow, onPerRow, onAdd, onLogout, user }) {
   return (
     <header>
+      <img src="/apple-touch-icon.png" alt="Honoteca" className="brand-ico" />
       <button type="button" className={`ico${view === 'shelf' ? ' active' : ''}`} title="Estante" onClick={() => onView('shelf')}>≡</button>
       <button type="button" className={`ico${view === 'grid' ? ' active' : ''}`} title="Cuadrícula" onClick={() => onView('grid')}>▦</button>
       <span className="seg" role="tablist" aria-label="Sección de la biblioteca">

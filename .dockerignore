@@ -2,6 +2,7 @@ node_modules
 dist
 state
 covers
+public/vendor
 .git
 .env
 .playwright-mcp
