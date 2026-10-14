@@ -60,47 +60,177 @@ async function fromOpenLibrary(isbn) {
       }
     } catch { /* sinopsis opcional */ }
   }
+  const byStmt = j.by_statement ? String(j.by_statement).replace(/^(by|por)\s+/i, '').replace(/[.]+$/, '').trim() : null;
+  const olAuthors = (j.authors || []).map((a) => a.name).filter(Boolean);
   return {
     isbn,
     title_native: j.title,
     title_romaji: null,
-    authors: (j.authors || []).map((a) => a.name).filter(Boolean),
+    authors: olAuthors.length ? olAuthors : (byStmt ? [byStmt] : []),
     pages: j.number_of_pages || null,
     cover_url: coverId ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg` : null,
     series: null,
-    publisher: (j.publishers || [])[0] || null,
+    publisher: cleanPub((j.publishers || [])[0]) || null,
+    publishers: pickPublishers(j.publishers || []),
     description,
     source: 'openlibrary',
     confidence: 0.8,
   };
 }
 
-// Búsqueda por TÍTULO (cliente manda texto, sin ISBN): Open Library search → obra → sinopsis.
+// Editoriales hispanas/comunes primero cuando Open Library mezcla 40 ediciones internacionales
+const HISP_PUB = /planeta|debolsillo|alfaguara|anagrama|urano|diana|paid[oó]s|salamandra|tusquets|seix barral|fondo de cultura|fce|grijalbo|aguilar|alianza|c[aá]tedra|siruela|acantilado|impedimenta|sexto piso|era|porr[uú]a|joaqu[ií]n mortiz|oc[eé]ano|minotauro|ediciones b|roca|espasa|austral|punto de lectura|suma|taurus|debate|cr[ií]tica|ariel|lum[eé]n|almad[ií]a|p[aá]gina ind[oó]mita|herder|kair[oó]s|mirlo|selector|trillas|siglo xxi|gedisa|trotta|akal|sirio|obelisco|conecta|empresa activa|booket|editorial|ediciones|grupo editorial|m[eé]xico|espa[ñn]a/i;
+const ENG_PUB = /\b(penguin|vintage|random house|harper(?:collins)?|simon & schuster|macmillan|farrar|st\.?\s*martin|hachette|bloomsbury|faber|oxford|cambridge|allen lane|hamish hamilton|sceptre|picador|panther|bantam|crown|scribner|viking|riverhead|little,\s*brown|mariner|norton|grove|routledge|wiley|o'reilly|no starch|pragmatic|manning|apress|packt|addison-wesley|mit press|princeton|yale|harvard|knopf|doubleday|tor|orbit|gollancz|hodder|transworld|chatto|jonathan cape|fourth estate|profile books|granta|atlantic books|canongate)\b/i;
+
+const HISP_ISBN = /^(97884|978607|978950|978958|978968|978970|978987|978956|9789972|978612|9789974|978980|84)/;
+
+const EN_WORDS = /\b(the|and|with|from|that|this|his|her|their|about|into|through|while|world|book|life|story|author|readers|years|written|between|after|before|where|which|would|could|should|have|has|had|been|were|they|them|what|when)\b/gi;
+const ES_WORDS = /\b(que|los|las|del|una|para|con|por|como|más|pero|sus|esta|este|entre|sobre|vida|libro|historia|mundo|autor|obra|cuando|todo|también|hasta|donde|quien|desde|nos|uno|son|fue|era|hay|sin)\b/gi;
+
+export function isEnglishText(text) {
+  const s = String(text || '').replace(/<[^>]+>/g, ' ').trim();
+  if (!s) return false;
+  const en = (s.match(EN_WORDS) || []).length;
+  const es = (s.match(ES_WORDS) || []).length + (s.match(/[áéíóúñ¿¡]/gi) || []).length;
+  return en >= 3 && en > es * 1.3;
+}
+
+// Solo se permite sinopsis en inglés cuando la editorial es inglesa (y el ISBN no es hispano).
+export function isEnglishPublisher(publisher, isbn) {
+  const pub = String(publisher || '').trim();
+  const clean = cleanIsbn(isbn);
+  if (clean && HISP_ISBN.test(clean)) return false;
+  if (pub && HISP_PUB.test(pub)) return false;
+  if (pub && ENG_PUB.test(pub)) return true;
+  return false;
+}
+
+function pickPublishers(rawList = []) {
+  const seen = new Set();
+  const clean = [];
+  for (const p of rawList) {
+    const s = String(p || '').replace(/\s+/g, ' ').replace(/[,.;:]+$/, '').trim();
+    if (!s || s.length > 42 || /independently published|createspace/i.test(s)) continue;
+    const key = s.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    clean.push(s);
+  }
+  clean.sort((a, b) => Number(HISP_PUB.test(b)) - Number(HISP_PUB.test(a)));
+  return clean.slice(0, 6);
+}
+
+function cleanPub(p) {
+  const s = String(p || '').replace(/\s+/g, ' ').replace(/[,.;:]+$/, '').trim();
+  if (!s || s.length > 42 || /independently published|createspace/i.test(s)) return null;
+  return s;
+}
+
+// Ediciones con portada real (cover_id > 0) de una obra de Open Library, priorizando ediciones en español.
+export async function editionsForWork(workKey, fallbackCoverId = null, fallbackPub = null) {
+  if (!workKey) return [];
+  const list = [];
+  const seenCovers = new Set();
+  try {
+    const r = await fetch(`https://openlibrary.org${workKey}/editions.json?limit=45`, {
+      signal: AbortSignal.timeout(TIMEOUT),
+      headers: { accept: 'application/json' },
+    });
+    if (r.ok) {
+      const entries = (await r.json()).entries || [];
+      for (const e of entries) {
+        const cid = Array.isArray(e.covers) ? e.covers.find((c) => Number(c) > 0) : null;
+        if (!cid || seenCovers.has(cid)) continue;
+        seenCovers.add(cid);
+        const pub = cleanPub((e.publishers || [])[0]);
+        const isbn = cleanIsbn((e.isbn_13 || [])[0] || (e.isbn_10 || [])[0] || '') || null;
+        const isSpa = (e.languages || []).some((l) => /\/spa$/.test(l?.key || ''))
+          || (isbn && HISP_ISBN.test(isbn))
+          || (pub && HISP_PUB.test(pub));
+        list.push({
+          cover_url: `https://covers.openlibrary.org/b/id/${cid}-L.jpg`,
+          publisher: pub,
+          isbn,
+          title: e.title || null,
+          _score: (isSpa ? 2 : 0) + (pub ? 1 : 0),
+        });
+      }
+    }
+  } catch { /* sin ediciones extra */ }
+  list.sort((a, b) => b._score - a._score);
+  if (fallbackCoverId > 0 && !seenCovers.has(fallbackCoverId)) {
+    list.unshift({
+      cover_url: `https://covers.openlibrary.org/b/id/${fallbackCoverId}-L.jpg`,
+      publisher: cleanPub(fallbackPub),
+      isbn: null,
+      title: null,
+      _score: 0,
+    });
+  }
+  return list.slice(0, 10).map(({ _score, ...rest }) => rest);
+}
+
+// Busca ediciones con portada para un libro (por ISBN o por título/autor) para el carrusel de portadas.
+export async function search_editions({ isbn, title, author } = {}) {
+  try {
+    if (isbn) {
+      const r = await fetch(`https://openlibrary.org/isbn/${encodeURIComponent(cleanIsbn(isbn))}.json`, {
+        signal: AbortSignal.timeout(TIMEOUT), headers: { accept: 'application/json' },
+      });
+      if (r.ok) {
+        const j = await r.json().catch(() => null);
+        const wk = j?.works?.[0]?.key;
+        if (wk) {
+          const eds = await editionsForWork(wk, j?.covers?.[0], j?.publishers?.[0]);
+          if (eds.length) return eds;
+        }
+      }
+    }
+    if (title) {
+      const q = [String(title).split(/[:/]/)[0].trim(), author].filter(Boolean).join(' ');
+      const r = await fetch(`https://openlibrary.org/search.json?${new URLSearchParams({
+        q, fields: 'key,cover_i,publisher', limit: '3',
+      })}`, { signal: AbortSignal.timeout(TIMEOUT), headers: { accept: 'application/json' } });
+      if (r.ok) {
+        const d = (await r.json()).docs?.find((x) => x.key);
+        if (d) return await editionsForWork(d.key, d.cover_i, d.publisher?.[0]);
+      }
+    }
+  } catch { /* degradar limpio */ }
+  return [];
+}
+
+// Búsqueda por TÍTULO (cliente manda texto, sin ISBN): Open Library search → obra → sinopsis + carrusel de ediciones.
 export async function search_by_title(q) {
   if (!q || q.trim().length < 2) return null;
   const r = await fetch(`https://openlibrary.org/search.json?${new URLSearchParams({
-    q, fields: 'title,author_name,cover_i,key,number_of_pages_median', limit: '5',
+    q, fields: 'title,author_name,cover_i,key,number_of_pages_median,publisher', limit: '8',
   })}`, { signal: AbortSignal.timeout(TIMEOUT), headers: { accept: 'application/json' } });
   if (!r.ok) return null;
-  const d = (await r.json()).docs?.find((x) => x.key && x.title);
+  const docs = (await r.json()).docs || [];
+  const d = docs.find((x) => x.key && x.title);
   if (!d) return null;
-  let description = null;
-  try {
-    const w = await fetch(`https://openlibrary.org${d.key}.json`, { signal: AbortSignal.timeout(TIMEOUT) });
-    if (w.ok) {
-      const wj = await w.json();
-      description = typeof wj.description === 'string' ? wj.description : (wj.description?.value ?? null);
-    }
-  } catch { /* sinopsis opcional */ }
+  const docPubs = pickPublishers(docs.slice(0, 4).flatMap((x) => x.publisher || []));
+  const [description, editions] = await Promise.all([
+    fetch(`https://openlibrary.org${d.key}.json`, { signal: AbortSignal.timeout(TIMEOUT) })
+      .then((w) => (w.ok ? w.json() : null))
+      .then((wj) => (typeof wj?.description === 'string' ? wj.description : (wj?.description?.value ?? null)))
+      .catch(() => null),
+    editionsForWork(d.key, d.cover_i, docPubs[0]),
+  ]);
+  const publishers = pickPublishers([...editions.map((e) => e.publisher), ...docPubs]);
+  const primary = editions[0] || null;
   return {
     isbn: null,
     title_native: d.title,
     title_romaji: null,
     authors: d.author_name || [],
     pages: d.number_of_pages_median || null,
-    cover_url: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : null,
+    cover_url: (primary && primary.cover_url) || (d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : null),
     series: null,
-    publisher: null,
+    publisher: (primary && primary.publisher) || publishers[0] || null,
+    publishers,
+    editions,
     description,
     source: 'openlibrary',
     confidence: 0.6,
@@ -215,25 +345,89 @@ export async function cover_by_title(title, author) {
   return null;
 }
 
+function cleanSpanishTitle(raw) {
+  let t = String(raw || '').split(/[:/]/)[0].trim();
+  const inv = /^(.*),\s*(el|la|los|las|un|una)$/i.exec(t);
+  if (inv) t = `${inv[2]} ${inv[1]}`.trim();
+  return t;
+}
+
+const stripHtml = (s) => String(s || '')
+  .replace(/<br\s*\/?>/gi, '\n')
+  .replace(/<\/p>/gi, '\n\n')
+  .replace(/<[^>]+>/g, ' ')
+  .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&quot;/gi, '"')
+  .replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const normKey = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+// Sinopsis comercial en español desde Apple Books (MX/ES, sin key): contraportada real de la edición.
+export async function esBookDescription(title, author) {
+  const full = cleanSpanishTitle(title);
+  if (full.length < 2) return null;
+  const short = full.split(/\.\s+/)[0].trim();
+  const candidates = short && short !== full ? [full, short] : [full];
+  for (const base of candidates) {
+    const want = normKey(base);
+    const wantWords = want.split(' ').filter((w) => w.length > 2);
+    for (const country of ['mx', 'es']) {
+      try {
+        const q = [base, author].filter(Boolean).join(' ');
+        const url = `https://itunes.apple.com/search?${new URLSearchParams({ term: q, country, media: 'ebook', limit: '6' })}`;
+        const r = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT) });
+        if (!r.ok) continue;
+        const results = (await r.json()).results || [];
+        for (const item of results) {
+          if (/resumen|summary|an[aá]lisis|gu[ií]a de lectura|50minutos/i.test(`${item.trackName} ${item.artistName}`)) continue;
+          const got = normKey(item.trackName || '');
+          const matchTitle = got.includes(want) || want.includes(got)
+            || (wantWords.length > 0 && wantWords.every((w) => got.includes(w)));
+          if (!matchTitle) continue;
+          const desc = stripHtml(item.description).slice(0, 3000);
+          if (desc.length >= 40 && !isEnglishText(desc)) {
+            return { description: desc, author: item.artistName || null };
+          }
+        }
+      } catch { /* siguiente país */ }
+    }
+  }
+  return null;
+}
+
 // Sinopsis en español (Wikipedia en español, sin key): primer párrafo de la obra como
-// blurb. Última red cuando Google no está disponible (cuota) o no tiene la edición.
+// blurb. Última red cuando Google/Apple no tienen la edición.
 const WIKI_NO_BOOK = /serie de televisi|pel[ií]cula|videojuego|canci[oó]n|sencillo|telefilme|es un [aá]lbum|\b[áa]lbum musical|anime|manga|programa de t|documental/i;
 export async function esWikiIntro(title) {
-  const t = String(title || '').split(/[:/]/)[0].trim();
-  if (t.length < 3) return null;
-  // La obra es un libro: rechaza artículos de series/películas/juegos que comparten nombre.
-  if (WIKI_NO_BOOK.test(t)) return null;
-  try {
+  const t = cleanSpanishTitle(title);
+  if (t.length < 3 || WIKI_NO_BOOK.test(t)) return null;
+  const fetchExtract = async (pageTitle) => {
     const url = 'https://es.wikipedia.org/w/api.php?' + new URLSearchParams({
-      action: 'query', prop: 'extracts', explaintext: '1', exintro: '1', format: 'json', titles: t,
+      action: 'query', redirects: '1', prop: 'extracts', explaintext: '1', exintro: '1', format: 'json', titles: pageTitle,
     });
     const r = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT), headers: { 'user-agent': 'Honoteca/1.0' } });
     if (!r.ok) return null;
-    const pages = Object.values((await r.json()).query.pages);
-    const p = pages.find((x) => !x.missing && x.extract && x.extract.length >= 40 && !WIKI_NO_BOOK.test(x.extract.slice(0, 90)));
-    if (!p) return null;
-    return p.extract.replace(/\s+/g, ' ').trim().slice(0, 1400);
-  } catch { return null; }
+    const pages = Object.values((await r.json()).query?.pages || {});
+    const p = pages.find((x) => !x.missing && x.extract && x.extract.length >= 40 && !WIKI_NO_BOOK.test(x.extract.slice(0, 110)));
+    return p ? p.extract.replace(/\s+/g, ' ').trim().slice(0, 1400) : null;
+  };
+  try {
+    const direct = await fetchExtract(t);
+    if (direct && !isEnglishText(direct)) return direct;
+    const sUrl = 'https://es.wikipedia.org/w/api.php?' + new URLSearchParams({
+      action: 'query', list: 'search', srsearch: `${t} libro`, srlimit: '3', format: 'json',
+    });
+    const sr = await fetch(sUrl, { signal: AbortSignal.timeout(TIMEOUT), headers: { 'user-agent': 'Honoteca/1.0' } });
+    if (!sr.ok) return null;
+    const want = normKey(t);
+    for (const hit of (await sr.json()).query?.search || []) {
+      if (!normKey(hit.title).includes(want)) continue;
+      const ext = await fetchExtract(hit.title);
+      if (ext && !isEnglishText(ext)) return ext;
+    }
+  } catch { /* ignorar */ }
+  return null;
 }
 
 // Descripción en el idioma de la EDICIÓN vía Google Books (volumes/{id}). Las sinopsis de
@@ -249,6 +443,29 @@ export async function gbDescription(isbn) {
     if (!d || d.length < 30) return null;
     return d.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 3000);
   } catch { return null; }
+}
+
+// Regla de idioma: SOLO se permite sinopsis en inglés si la editorial es inglesa.
+// En cualquier otro caso se busca en español (Google → Apple Books → Wikipedia ES) y se descarta inglés.
+export async function resolveDescription(hit, isbn) {
+  if (!hit) return null;
+  const allowEn = isEnglishPublisher(hit.publisher, isbn || hit.isbn);
+  const valid = (d) => Boolean(d && d.length >= 30 && (allowEn || !isEnglishText(d)));
+
+  const gd = (isbn || hit.isbn) ? await gbDescription(isbn || hit.isbn) : null;
+  if (valid(gd)) return gd;
+  if (valid(hit.description)) return hit.description;
+
+  if (!allowEn && hit.title_native) {
+    const ab = await esBookDescription(hit.title_native, hit.authors?.[0]);
+    if (ab) {
+      if ((!hit.authors || !hit.authors.length) && ab.author) hit.authors = [ab.author];
+      if (valid(ab.description)) return ab.description;
+    }
+    const wi = await esWikiIntro(hit.title_native);
+    if (valid(wi)) return wi;
+  }
+  return null;
 }
 
 const SOURCES = [

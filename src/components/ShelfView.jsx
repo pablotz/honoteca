@@ -20,7 +20,7 @@ const DECOR = ['back-panel', 'plank-top', 'plank-front'];
 
 // Reordena los libros del mueble: `perRow` libros por balda. Pedido estable (por ubicación),
 // los que no tienen ubicación van al final. Mínimo 6 baldas aunque haya pocos libros.
-export default function ShelfView({ books, perRow, onOpen, onAddCover, buy = false, holeId }) {
+export default function ShelfView({ books, perRow, onOpen, onAddCover, buy = false, holeId, vtId }) {
   const ordered = [...books].sort((a, b) => {
     const la = a.location, lb = b.location;
     if (!la && !lb) return 0; if (!la) return 1; if (!lb) return -1;
@@ -43,7 +43,7 @@ export default function ShelfView({ books, perRow, onOpen, onAddCover, buy = fal
           {DECOR.map((c) => <i key={c} className={c} />)}
           {groups.get(u).map((b) => b.id === holeId
             ? <div key={`hole-${b.id}`} className="tile slot" /> // el libro está "sacado" del estante
-            : <Tile key={b.id} book={b} onOpen={onOpen} onAddCover={onAddCover} />)}
+            : <Tile key={b.id} book={b} onOpen={onOpen} onAddCover={onAddCover} vtActive={b.id === vtId} />)}
           {ri % 2 === 0 && <Prop key={`prop-${u}`} kind={PROPS[(ri / 2) % PROPS.length]} />}
         </div>
       ))}

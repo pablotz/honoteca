@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import Tile from './Tile.jsx';
 import SourcesReport from './SourcesReport.jsx';
 import ScanFrame from './ScanFrame.jsx';
+import CoverCarousel from './CoverCarousel.jsx';
 import { displayAuthor, fmtIsbn, locText } from '../lib/book.js';
 import { copyText } from '../lib/clipboard.js';
 
@@ -28,14 +29,30 @@ export default function ConfirmPanel({
   const entryRef = useRef(null);
   const m = session.meta;
   const e0 = session.existing && session.existing[0];
+  const [pub, setPub] = useState(() => (m && m.publisher) || (e0 && e0.publisher) || '');
+  const [chosenCover, setChosenCover] = useState(() => (m && m.cover_url) || (e0 && e0.cover_url) || null);
+  const [editingPub, setEditingPub] = useState(false);
+  const pubOptions = (m && m.publishers) || [];
+  const editions = (m && m.editions) || [];
+
+  const withPub = (base) => {
+    const out = { ...base, publisher: pub.trim() || base.publisher || null };
+    if (chosenCover && chosenCover !== (m && m.cover_url)) {
+      out.cover_url = chosenCover;
+      out.cover_front = null; // la portada elegida en el carrusel manda sobre la cacheada del ISBN
+    } else if (chosenCover && !out.cover_front) {
+      out.cover_url = chosenCover;
+    }
+    return out;
+  };
 
   // tile de confirmación: título/sinopsis de meta (o del ejemplar existente), sin portada → generada
   const confirmBook = {
     title_native: (m && m.title_native) || (e0 && e0.title_native) || session.typed || null,
     isbn: session.isbn,
     strip_color: session.strip.color, strip_present: session.strip.present,
-    cover_front: (m && m.cover_front) || null,
-    cover_url: (m && m.cover_url) || (e0 && e0.cover_url) || null, needs_review: false,
+    cover_front: chosenCover && chosenCover !== (m && m.cover_url) ? null : ((m && m.cover_front) || null),
+    cover_url: chosenCover || (m && m.cover_url) || (e0 && e0.cover_url) || null, needs_review: false,
   };
 
   let heading, headingCls = '';
@@ -53,15 +70,15 @@ export default function ConfirmPanel({
   const withAgain = again ? [again] : [];
   const actions = {
     A: [
-      { label: 'Sí, es este', kind: 'primary', run: () => onCommit('A', 'create', onProposal()) },
+      { label: 'Sí, es este', kind: 'primary', run: () => onCommit('A', 'create', withPub(onProposal())) },
       { label: 'Corregir', kind: 'seco', run: onEditManual },
       ...withAgain,
     ],
     B: [{ label: 'Buscar', kind: 'primary', run: () => onManual(entry) }, ...withAgain],
     C: [
       { label: 'Buscar por título', kind: 'primary', run: () => { const q = entry.trim(); return q ? onSearchTitle(q) : entryRef.current?.focus(); } },
-      { label: 'Poner título a mano', kind: 'seco', run: () => { const v = entry.trim(); if (!v) { entryRef.current?.focus(); return; } onCommit('C', 'create', { ...onProposal(), title_native: v }); } },
-      { label: 'Guardar sin título', kind: 'seco', run: () => onCommit('C', 'create', onProposal()) },
+      { label: 'Poner título a mano', kind: 'seco', run: () => { const v = entry.trim(); if (!v) { entryRef.current?.focus(); return; } onCommit('C', 'create', withPub({ ...onProposal(), title_native: v })); } },
+      { label: 'Guardar sin título', kind: 'seco', run: () => onCommit('C', 'create', withPub(onProposal())) },
       ...withAgain,
     ],
     D: [
@@ -82,6 +99,40 @@ export default function ConfirmPanel({
           {state === 'B' && <div className="scan-row"><ScanFrame mini empty /></div>}
           {au && <div className="a">{au}</div>}
           {state !== 'B' && state !== 'C' && m && m.series && <div className="a">{m.series}</div>}
+          {state === 'A' && (
+            <div className="pub-pick">
+              <div className="pub-label">
+                Editorial:{' '}
+                {editingPub ? (
+                  <input
+                    className="input pub-input"
+                    placeholder="ej. Debolsillo, Planeta…"
+                    value={pub}
+                    onChange={(e) => setPub(e.target.value)}
+                    onBlur={() => setEditingPub(false)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') setEditingPub(false); }}
+                    autoFocus
+                  />
+                ) : (
+                  <button type="button" className="chip pub-edit" onClick={() => setEditingPub(true)}>
+                    {pub || '＋ elegir editorial'} ✎
+                  </button>
+                )}
+              </div>
+              {pubOptions.length > 1 && editions.length <= 1 && (
+                <div className="pub-chips">
+                  {pubOptions.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`chip${pub === p ? ' active' : ''}`}
+                      onClick={() => { setPub(p); setEditingPub(false); }}
+                    >{p}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {session.isbn && (
             <div className="chiprow">
               <span className="muted">ISBN</span>
@@ -91,6 +142,17 @@ export default function ConfirmPanel({
           {state === 'C' && <SourcesReport sources={session.sources} />}
         </div>
       </div>
+
+      {state === 'A' && editions.length > 1 && (
+        <CoverCarousel
+          editions={editions}
+          selectedUrl={chosenCover}
+          onSelect={(ed) => {
+            setChosenCover(ed.cover_url);
+            if (ed.publisher) { setPub(ed.publisher); setEditingPub(false); }
+          }}
+        />
+      )}
 
       {state === 'D' && (
         <div className="who">

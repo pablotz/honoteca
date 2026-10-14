@@ -41,9 +41,33 @@ export function validIsbn(t) {
   return false;
 }
 
+const HISP_PUB = /planeta|debolsillo|alfaguara|anagrama|urano|diana|paid[oó]s|salamandra|tusquets|seix barral|fondo de cultura|fce|grijalbo|aguilar|alianza|c[aá]tedra|siruela|acantilado|impedimenta|sexto piso|era|porr[uú]a|joaqu[ií]n mortiz|oc[eé]ano|minotauro|ediciones b|roca|espasa|austral|punto de lectura|suma|taurus|debate|cr[ií]tica|ariel|lum[eé]n|almad[ií]a|p[aá]gina ind[oó]mita|herder|kair[oó]s|mirlo|selector|trillas|siglo xxi|gedisa|trotta|akal|sirio|obelisco|conecta|empresa activa|booket|editorial|ediciones|grupo editorial|m[eé]xico|espa[ñn]a/i;
+const ENG_PUB = /\b(penguin|vintage|random house|harper(?:collins)?|simon & schuster|macmillan|farrar|st\.?\s*martin|hachette|bloomsbury|faber|oxford|cambridge|allen lane|hamish hamilton|sceptre|picador|panther|bantam|crown|scribner|viking|riverhead|little,\s*brown|mariner|norton|grove|routledge|wiley|o'reilly|no starch|pragmatic|manning|apress|packt|addison-wesley|mit press|princeton|yale|harvard|knopf|doubleday|tor|orbit|gollancz|hodder|transworld|chatto|jonathan cape|fourth estate|profile books|granta|atlantic books|canongate)\b/i;
+const HISP_ISBN = /^(97884|978607|978950|978958|978968|978970|978987|978956|9789972|978612|9789974|978980|84)/;
+const EN_WORDS = /\b(the|and|with|from|that|this|his|her|their|about|into|through|while|world|book|life|story|author|readers|years|written|between|after|before|where|which|would|could|should|have|has|had|been|were|they|them|what|when)\b/gi;
+const ES_WORDS = /\b(que|los|las|del|una|para|con|por|como|más|pero|sus|esta|este|entre|sobre|vida|libro|historia|mundo|autor|obra|cuando|todo|también|hasta|donde|quien|desde|nos|uno|son|fue|era|hay|sin)\b/gi;
+
+export function isEnglishText(text) {
+  const s = String(text || '').replace(/<[^>]+>/g, ' ').trim();
+  if (!s) return false;
+  const en = (s.match(EN_WORDS) || []).length;
+  const es = (s.match(ES_WORDS) || []).length + (s.match(/[áéíóúñ¿¡]/gi) || []).length;
+  return en >= 3 && en > es * 1.3;
+}
+
+export function isEnglishPublisher(publisher, isbn) {
+  const pub = String(publisher || '').trim();
+  const clean = String(isbn || '').replace(/[^0-9Xx]/g, '').toUpperCase();
+  if (clean && HISP_ISBN.test(clean)) return false;
+  if (pub && HISP_PUB.test(pub)) return false;
+  if (pub && ENG_PUB.test(pub)) return true;
+  return false;
+}
+
 // Sinopsis HTML de la fuente → texto plano legible.
-export function blurbText(text) {
-  return String(text || '')
+// Regla de idioma: sinopsis en inglés SOLO cuando la editorial es inglesa.
+export function blurbText(text, book) {
+  const clean = String(text || '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')
     .replace(/<[^>]+>/g, '')
@@ -51,6 +75,10 @@ export function blurbText(text) {
     .replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
     .replace(/\n{3,}/g, '\n\n')
     .trim() || null;
+  if (clean && book && isEnglishText(clean) && !isEnglishPublisher(book.publisher, book.isbn)) {
+    return null;
+  }
+  return clean;
 }
 
 export const locText = (l) => `${l.shelf} · fila ${l.row} · ${l.pos}.º`;

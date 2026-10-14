@@ -33,17 +33,27 @@ header { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; gap:12
                                             color-mix(in srgb, var(--room2) 82%, #000 18%));
          border-bottom:1px solid rgba(0,0,0,.5); box-shadow:0 6px 16px rgba(0,0,0,.35); }
 .brand { font-weight:700; letter-spacing:.3px; }
-.brand-ico { width:36px; height:36px; border-radius:9px; object-fit:cover; box-shadow:0 2px 6px rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.12); flex:0 0 auto; }
-.ico { width:36px; height:36px; border-radius:10px; border:1px solid var(--line); background:var(--bg);
-       color:var(--dim); font-size:17px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
-.ico.active { color:var(--mustard); border-color:var(--mustard); background:var(--line); }
+.brand-ico { width:36px; height:36px; border-radius:10px; object-fit:cover; box-shadow:0 4px 12px rgba(0,0,0,.4); flex:0 0 auto; }
+.ico { width:38px; height:38px; border-radius:13px; border:0; background:var(--panel);
+       color:var(--dim); font-size:17px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+       box-shadow:0 5px 14px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.07); }
+.ico.active { color:#24180a; background:var(--mustard); font-weight:700;
+              box-shadow:0 6px 16px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.28); }
 .ico:active { background:var(--line); }
+.logout-btn { height:38px; padding:0 13px; border-radius:13px; border:0;
+              background:color-mix(in srgb, var(--danger) 16%, var(--panel)); color:var(--danger);
+              font:inherit; font-size:13.5px; font-weight:600; cursor:pointer;
+              display:inline-flex; align-items:center; gap:6px;
+              box-shadow:0 5px 14px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.07); }
+.logout-btn:hover { filter:brightness(1.08); }
+@media (max-width:520px) { .logout-btn { padding:0 11px; } .logout-lbl { display:none; } }
 .grow { flex:1; }
 .perrow { display:flex; align-items:center; gap:5px; margin-left:6px; font-size:12px; color:var(--dim); }
 .perrow input { width:88px; accent-color:var(--mustard); cursor:pointer; }
 .perrow b { min-width:12px; text-align:center; }
-.add { margin-left:10px; width:38px; height:38px; border-radius:50%; border:0; background:var(--mustard); color:#24180a;
-       font-size:20px; font-weight:700; line-height:1; cursor:pointer; flex:0 0 auto; }
+.add { margin-left:4px; width:40px; height:40px; border-radius:50%; border:0; background:var(--mustard); color:#24180a;
+       font-size:21px; font-weight:700; line-height:1; cursor:pointer; flex:0 0 auto;
+       box-shadow:0 6px 16px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.3); }
 /* FAB: en teléfono el punto de entrada a la captura vive ABAJO (pulgar) — §6 */
 .fab { display:none; position:fixed; z-index:20; right:18px; bottom:calc(18px + env(safe-area-inset-bottom, 0px));
        width:60px; height:60px; border-radius:50%; border:0; background:var(--mustard); color:#24180a;
@@ -65,15 +75,16 @@ main { padding:16px; }
                   background:#0009; border:1px solid var(--line); color:var(--mustard); font-size:14px; line-height:22px;
                   text-align:center; cursor:pointer; }
 /* vista estante: el mueble va CONTRA la pared de la habitación (el fondo de la página).
-   Sin panel trasero propio: lo que se ve detrás de los libros es la madera del body. */
+   Sin panel trasero propio ni filter:drop-shadow en el contenedor (si el padre usa drop-shadow,
+   al sacar un libro a .tile.slot o iniciar View Transition cambia la máscara alfa y parpadean
+   las sombras de todos los libros). La sombra de pared vive en .plank-front y en cada .tile. */
 .shelfview { position:relative; display:flex; flex-direction:column; gap:0; width:100%;
-             background:none;
-             /* el mueble proyecta su sombra sobre la pared: está EN la habitación */
-             filter:drop-shadow(0 20px 22px rgba(0,0,0,.38)); }
+             background:none; }
 /* en escritorio, la balda cabe 6 libros (6x150 + 5x8 + 2x16 = 972) */
 @media (min-width:900px){ .shelfview { max-width:980px; margin:0 auto; } }
-.shelfrow { position:relative; z-index:1; display:flex; align-items:flex-end; flex-wrap:nowrap; gap:8px;
-            justify-content:space-between; padding:16px 16px 38px; min-height:150px; } /* libros repartidos, sin hueco al final */
+.shelfrow { position:relative; z-index:1; display:flex; align-items:flex-end; flex-wrap:nowrap;
+            gap:clamp(10px, 3.6vw, 18px); justify-content:flex-start;
+            padding:16px 14px 38px; min-height:164px; }
 /* rehundido: la sombra que proyecta la balda de ARRIBA sobre el hueco de abajo. Corta y
    pegada al canto (no un degradado por todo el hueco) para que se lea como sombra real,
    también en baldas vacías. */
@@ -97,23 +108,22 @@ main { padding:16px; }
                 transparent 2px 5px, rgba(0,0,0,.06) 5px 6px, transparent 6px 11px),
               linear-gradient(to bottom, #e8c98f 0 2px, #e3c48c 2px, #b58a4e);
             border-top:1px solid rgba(255,235,190,.85); border-bottom:1px solid #2a1605;
-            box-shadow:0 4px 8px rgba(0,0,0,.45); } /* sombra pegada al canto: la balda sobresale */
-.shelfrow .tile { z-index:3;
-  box-shadow:inset 0 0 0 1px #0004, 3px 0 8px rgba(0,0,0,.45), 0 3px 4px rgba(0,0,0,.5); }
+            box-shadow:0 4px 8px rgba(0,0,0,.45), 0 18px 22px rgba(0,0,0,.36); } /* sombra pegada al canto + sombra en pared */
+.shelfrow .tile { z-index:3; width:clamp(92px, 27.5vw, 114px);
+  box-shadow:inset 0 0 0 1px #0004, 3px 0 8px rgba(0,0,0,.45), 0 6px 14px rgba(0,0,0,.48); }
 .shelfrow .tile::after { content:''; position:absolute; left:0; top:0; bottom:0; width:5px; z-index:5;
                          background:linear-gradient(90deg, #0007, transparent); } /* brillo de lomo */
-.shelfrow .tile { width:100px; }
-.shelfrow .tile.gen { width:88px; }
+.shelfrow .tile.gen { width:clamp(92px, 27.5vw, 114px); }
 @media (min-width:900px){
-  .shelfrow { min-height:225px; }
+  .shelfrow { min-height:225px; gap:8px; justify-content:space-between; padding:16px 16px 38px; }
   .shelfrow .tile { width:150px; }
   .shelfrow .tile.gen { width:130px; }
   .grid { grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:20px; }
 }
-/* el «‹» de la ficha y de la confirmación (vuelve al estante): relleno, no solo borde (igual que el resto) */
-.btn.ghost.back { background:var(--panel); border-color:var(--line); color:var(--ink); }
+/* el «‹» de la ficha y de la confirmación (vuelve al estante): relleno con sombra suave, sin bordes */
+.btn.ghost.back { background:var(--panel); border:0; color:var(--ink); }
 .btn.ghost.back:active { background:var(--line); }
-.coverbtn { width:min(36vw, 330px); padding:10px 12px; font-size:14px; }
+.coverbtn { width:min(36vw, 330px); padding:11px 14px; font-size:14.5px; }
 .bcover { flex:0 0 auto; width:min(36vw, 330px); aspect-ratio:2/3; border-radius:0;
           background-size:cover; background-position:center; border:1px solid var(--line);
           box-shadow:0 12px 34px #0005; display:flex; align-items:flex-end; overflow:hidden; }
@@ -150,20 +160,28 @@ main { padding:16px; }
 .pauthor { font-family:ui-serif, Georgia, 'Times New Roman', serif; font-size:21px; line-height:1.3;
            color:var(--ink); }
 .ppub { font-size:12.5px; color:var(--dim); }
+.ppub-btn { border:0; background:rgba(0,0,0,.18); color:var(--dim); font:inherit; font-size:12.5px;
+            padding:4px 11px; border-radius:999px; cursor:pointer; align-self:center;
+            box-shadow:0 3px 8px rgba(0,0,0,.2); transition:transform .14s ease, color .14s ease; }
+.ppub-btn:hover { color:var(--ink); }
+.ppub-btn .edit-pen { opacity:.65; font-size:11px; margin-left:3px; }
 .detail-panel .bcover { width:100%; }
 .detail-panel .coverbtn, .detail-panel .page-foot { width:100%; }
-.retry-cover { width:100%; margin:0; padding:9px 10px; font-size:12.5px;
-               background:var(--panel); border:1px solid var(--line); border-radius:10px; color:var(--dim); cursor:pointer;
+.retry-cover { width:100%; margin:0; padding:10px 12px; font-size:13px; font-weight:600;
+               background:var(--panel); border:0; border-radius:14px; color:var(--ink); cursor:pointer;
+               box-shadow:0 6px 16px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.07);
                transition:transform .14s ease; }
-.retry-cover:active { transform:scale(.98); background:var(--line); }
+.retry-cover:active { transform:scale(.97); background:var(--line); }
 .panel-close { position:absolute; top:0; right:0; z-index:1;
-               width:34px; height:34px; border-radius:10px; border:1px solid var(--line);
-               background:var(--bg); color:var(--dim); font-size:15px; cursor:pointer;
+               width:36px; height:36px; border-radius:50%; border:0;
+               background:var(--panel); color:var(--ink); font-size:15px; font-weight:600; cursor:pointer;
+               box-shadow:0 5px 14px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.08);
                transition:transform .14s ease; }
-.panel-close:active { transform:scale(.92); background:var(--line); }
+.panel-close:active { transform:scale(.9); background:var(--line); }
 
 /* el hueco que deja el libro "sacado" del estante: espacio vacío, sin caja */
 .tile.slot { cursor:default; background:none; border:0; box-shadow:none; }
+.book-reflow :is(.shelfview, .grid) .tile:not(.slot) { view-transition-name:var(--book-transition); }
 .shelfrow .tile.slot::after { content:none; /* el brillo de lomo de cada tile tampoco debe pintarse aquí */ }
 
 /* el libro 3D volador: overlay fijo con el Cover3D dentro, que crece de la balda al panel.
@@ -205,12 +223,13 @@ main { padding:16px; }
 .login-card { width:min(92vw, 380px); display:flex; flex-direction:column; gap:12px; padding:24px;
   background:linear-gradient(180deg, color-mix(in srgb, var(--room1) 84%, #000 16%),
                                      color-mix(in srgb, var(--room2) 76%, #000 24%));
-  border:1px solid rgba(0,0,0,.5); border-radius:18px;
+  border:0; border-radius:18px;
   box-shadow:0 24px 50px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.05); }
-.login-brand { font-family:ui-serif, Georgia, 'Times New Roman', serif; font-weight:700; font-size:26px;
-               text-align:center; color:var(--ink); }
-.login-msg { font-size:14px; line-height:1.5; color:var(--ink); text-align:center; margin:0; }
-.login-dev { font-size:12px; color:var(--dim); text-align:center; margin:0; }
+.login-brand { font-family:Georgia, 'Times New Roman', serif; font-weight:600; font-size:36px;
+               line-height:1.2; letter-spacing:-.04em; text-align:center; color:var(--ink); margin:0 0 4px; }
+.login-msg { font-size:16px; line-height:1.65; color:var(--ink); text-align:center; margin:0 0 8px; overflow-wrap:anywhere; }
+.login-dev { font-size:14px; line-height:1.6; color:var(--ink); background:var(--bg);
+             padding:12px 14px; border-radius:12px; text-align:left; margin:4px 0 0; }
 .login-card .input { margin-top:0; }
 
 /* en el teléfono los objetos estorban: se ocultan */
@@ -228,25 +247,46 @@ main { padding:16px; }
   box-shadow:0 5px 10px rgba(0,0,0,.4); }
 
 /* en móvil la fila no cabe: el panel pasa a hoja inferior con velo (toca fuera para cerrar) */
-@media (max-width:900px) {
+@media (max-width:899px) {
+  header { gap:7px; padding:9px 12px; flex-wrap:nowrap; }
+  .brand-ico { width:34px; height:34px; }
+  .ico { width:35px; height:35px; border-radius:11px; font-size:16px; flex:0 0 auto; }
+  .seg button { padding:5px 10px; font-size:12.5px; }
+  .perrow { display:none; } /* en teléfono maxPerRow=3 (min=3), la barra no cambia nada y partía la cabecera */
+  main { padding:12px 10px calc(92px + env(safe-area-inset-bottom, 0px)); }
+  .grid { grid-template-columns:repeat(auto-fill, minmax(102px, 1fr)); gap:12px; }
   .split { display:block; }
-  .panel-fade { display:block; position:fixed; inset:0; background:#0009; z-index:30; animation:fadeIn .18s ease; }
-  .detail-panel { position:fixed; left:10px; right:10px; bottom:10px; top:auto; height:auto; z-index:40;
-                  max-height:82dvh; border-radius:20px; box-shadow:0 -14px 44px #000a; }
-  /* el panel llega CON el libro volador: oculto (opacity 0) hasta que el clon está en el aire,
-     para que nunca se vea "el libro primero y luego la ficha". SOLO en móvil: en escritorio
-     debe estar OPACO en el momento de la captura o el libro vuela hacia un hueco invisible. */
-  .detail-panel { opacity:0; pointer-events:none; transition:opacity .28s ease; }
-  .detail-panel.show { opacity:1; pointer-events:auto; }
+  .panel-fade { display:block; position:fixed; inset:0; background:rgba(0,0,0,.62); backdrop-filter:blur(3px); z-index:30; animation:fadeIn .18s ease; }
+  .detail-panel { position:fixed; left:8px; right:8px; bottom:8px; top:auto; height:auto; z-index:40;
+                  max-height:86dvh; border-radius:24px;
+                  background:linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, #000 4%), var(--bg));
+                  border:1px solid var(--line);
+                  padding:18px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+                  box-shadow:0 -14px 44px rgba(0,0,0,.68), inset 0 1px 0 rgba(255,255,255,.08);
+                  /* llega CON el libro volador: oculto hasta que aterriza */
+                  opacity:0; pointer-events:none; transform:translateY(10px);
+                  transition:opacity .24s ease, transform .24s cubic-bezier(.22,.8,.25,1); }
+  .detail-panel::before { content:''; display:block; width:38px; height:4px; border-radius:99px;
+                          background:var(--line); margin:0 auto 10px; flex:0 0 auto; }
+  .detail-panel.show { opacity:1; pointer-events:auto; transform:none; }
+  .detail-panel .pane { gap:10px; min-height:0; justify-content:flex-start; }
+  .detail-panel .ptitle { font-size:21px; padding:0 34px; }
+  .detail-panel .pauthor { font-size:16.5px; }
+  .detail-panel .bcover { width:min(50vw, 200px); }
+  .detail-panel .cv-hint { max-width:90%; font-size:12px; }
+  .panel-close { top:12px; right:12px; width:34px; height:34px; background:var(--bg); }
+  .ctile { width:104px; }
 }
 /* estado vacío §6.2 — el mueble, vacío */
 .empty { text-align:left; padding:6px 2px 0; }
 .shelf { border:1px solid var(--line); border-radius:10px; padding:14px 12px 4px; background:#191510; }
 .shelf .row { display:flex; align-items:flex-end; gap:6px; height:66px; border-bottom:3px solid var(--line); margin-bottom:10px; }
 .shelf .lblrow { font-size:11px; color:var(--dim); letter-spacing:.06em; }
-.btn { display:block; width:100%; padding:14px 16px; border-radius:12px; border:0; font-size:16px; font-weight:600;
-       background:var(--mustard); color:#24180a; cursor:pointer; }
-.btn.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); font-weight:500; margin-top:8px; }
+.btn { display:block; width:100%; padding:14px 18px; border-radius:15px; border:0; font-size:15.5px; font-weight:700;
+       background:var(--mustard); color:#24180a; cursor:pointer;
+       box-shadow:0 7px 18px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.28); }
+.btn.ghost { background:var(--panel); color:var(--ink); border:0; font-weight:600; margin-top:8px;
+             box-shadow:0 5px 14px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.07); }
 .cta { margin-top:18px; }
 .gest { color:var(--dim); font-size:13px; margin-top:10px; text-align:center; }
 /* confirmación */
@@ -258,21 +298,40 @@ main { padding:16px; }
 .cmeta .a { color:var(--dim); font-size:13.5px; }
 .cmeta .isbn { font-family:ui-monospace,monospace; font-size:12.5px; color:var(--dim); margin-top:6px; }
 .who { font-size:12.5px; color:var(--dim); margin:10px 0 2px; }
-.input { width:100%; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--ink); font-size:16px; margin-top:12px; }
-.cvthumb { display:block; width:76px; margin:10px auto 0; border-radius:8px; border:1px solid var(--line); }
+.input { width:100%; padding:13px 14px; border-radius:14px; border:0; background:var(--bg); color:var(--ink); font-size:16px; margin-top:12px;
+         box-shadow:inset 0 2px 6px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.05); }
+.cvthumb { display:block; width:76px; margin:10px auto 0; border-radius:10px; box-shadow:0 5px 14px rgba(0,0,0,.35); }
 .chiprow { display:flex; align-items:center; gap:8px; margin-top:8px; }
-.chip { font-family:ui-monospace,monospace; font-size:12.5px; padding:5px 9px; border-radius:8px;
-        border:1px solid var(--line); background:var(--bg); color:var(--ink); cursor:pointer; }
+.chip { font-family:ui-monospace,monospace; font-size:12.5px; padding:6px 11px; border-radius:999px;
+        border:0; background:var(--panel); color:var(--ink); cursor:pointer;
+        box-shadow:0 4px 10px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.07); }
+.chip.active { background:var(--mustard); color:#24180a; font-weight:700; }
 .chip:active { background:var(--line); }
-dialog { border:0; border-radius:18px; background:var(--panel); color:var(--ink);
-         padding:0; width:min(430px, calc(100vw - 32px)); margin:auto; }
+.pub-pick { margin-top:8px; display:flex; flex-direction:column; gap:6px; }
+.pub-label { font-size:12.5px; color:var(--dim); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.pub-edit { font-family:inherit; font-size:12.5px; }
+.pub-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.pub-chips .chip { font-family:inherit; font-size:12px; padding:5px 10px; }
+.pub-input { margin-top:4px; padding:8px 11px; font-size:13.5px; max-width:220px; }
+dialog { border:0; border-radius:22px; background:var(--panel); color:var(--ink);
+         padding:0; width:min(430px, calc(100vw - 32px)); margin:auto;
+         box-shadow:0 24px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07); }
+dialog.logout-dlg { position:fixed; inset:0; z-index:70; }
+dialog.logout-dlg::backdrop { backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+html:has(.logout-dlg[open]), body:has(.logout-dlg[open]) { overflow:hidden; }
 dialog::backdrop { background:#000a; }
+.synopsis-dialog { width:min(560px, calc(100vw - 32px)); max-height:85dvh; }
+.synopsis-dialog .nd { display:flex; flex-direction:column; max-height:85dvh; box-sizing:border-box; }
+.synopsis-dialog .nd-title { flex-shrink:0; }
+.synopsis-text { overflow-y:auto; min-height:0; font-size:17px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; text-align:left; }
+.synopsis-dialog .btn { flex-shrink:0; }
 .nd { padding:22px; }
 .nd-title { font-size:19px; font-weight:700; margin:0 0 16px; letter-spacing:.2px; }
 .card { display:flex; flex-direction:column; gap:4px; width:100%; padding:18px;
-        border:1px solid var(--line); border-radius:14px; background:var(--bg);
-        color:var(--ink); text-align:left; cursor:pointer; margin-bottom:16px; }
-.card:active { border-color:var(--mustard); }
+        border:0; border-radius:16px; background:var(--bg);
+        color:var(--ink); text-align:left; cursor:pointer; margin-bottom:16px;
+        box-shadow:0 7px 18px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06); }
+.card:active { filter:brightness(1.06); }
 .card-t { font-size:16px; font-weight:700; }
 .card-d { font-size:13px; color:var(--dim); line-height:1.45; }
 .nd-search label { display:block; font-size:13px; color:var(--dim); margin:14px 0 4px; }
@@ -297,9 +356,9 @@ dialog::backdrop { background:#000a; }
 .filehidden { position:fixed; left:0; top:0; width:1px; height:1px; opacity:0; pointer-events:none; }
 /* editor de portada: recorte 2:3, con arrastrar para encuadrar y zoom */
 .cropmask { position:fixed; inset:0; z-index:40; background:#000a; display:flex; align-items:center;
-            justify-content:center; padding:16px; }
+            justify-content:center; padding:16px; animation:fadeIn .24s ease; }
 .croppanel { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:14px;
-             padding:16px; width:min(94vw, 520px); }
+             padding:16px; width:min(94vw, 520px); animation:dlgIn .3s cubic-bezier(.2,.8,.25,1.25) backwards; }
 .cropbox { position:relative; overflow:hidden; width:100%; aspect-ratio:2/3; background:#000;
            border-radius:8px; touch-action:none; cursor:grab; }
 .cropbox.pan { cursor:grabbing; }
@@ -339,22 +398,47 @@ dialog::backdrop { background:#000a; }
   .shelfrow .tile:not(.slot):hover:active, .grid .tile:not(.slot):hover:active { transform: translateY(-2px) scale(.97); }
 }
 
-/* --- micro-animaciones: feedback táctil en todo lo tocable --- */
-.ico, .add, .fab, .btn, .card, .chip, .tile { transition: transform .14s ease; }
-.ico:active, .chip:active { transform: scale(.9); }
-.add:active, .fab:active { transform: scale(.85); }
-.btn:active { transform: scale(.975); }
-.card:active { transform: scale(.98); }
-.tile:not(.slot):active { transform: scale(.95); }
-/* los azulejos, más largos y "blandos": con sombra incluida (hover arriba lo usa) */
+/* Feedback breve: elevar al pasar el cursor, comprimir al tocar y volver con rebote. */
+button {
+  transition: transform .26s cubic-bezier(.2,.8,.25,1.35), background-color .2s ease,
+              color .2s ease, box-shadow .2s ease, filter .2s ease;
+}
 .tile { transition: transform .26s cubic-bezier(.22,.7,.25,1), box-shadow .28s ease; }
-@media (min-width:900px) { .grid .tile:hover { transform: translateY(-4px); } }
+button:disabled { cursor:default; }
+button:focus-visible, .bcover3d:focus-visible { outline:2px solid var(--mustard); outline-offset:4px; }
+@media (hover:hover) and (pointer:fine) {
+  button:not(:disabled):hover { transform:translateY(-2px); filter:brightness(1.08); }
+  .add:not(:disabled):hover, .fab:not(:disabled):hover { transform:translateY(-3px) rotate(8deg); }
+}
+button:not(:disabled):active { transform:translateY(1px) scale(.95); transition-duration:.08s; }
+.add:active, .fab:active { transform:scale(.9); }
+.tile:not(.slot):active { transform:scale(.95); }
+.ico.active, .seg button.active, .chip.active, .c-card.active { animation:selectionPop .3s cubic-bezier(.2,.8,.25,1); }
+@keyframes selectionPop { 0% { scale:.94; } 55% { scale:1.06; } 100% { scale:1; } }
 
-/* el diálogo «＋» entra con un pop; el fondo se funde */
-dialog[open] { animation: dlgIn .22s ease backwards; }
-dialog::backdrop { animation: fadeIn .18s ease; }
-@keyframes dlgIn { from { opacity:0; transform:scale(.94) translateY(10px); } }
+/* Entrada compatible; los diálogos nativos también animan el cierre donde se admite overlay. */
+dialog[open] { animation:dlgIn .3s cubic-bezier(.2,.8,.25,1.25) backwards; }
+dialog::backdrop { animation:fadeIn .24s ease; }
+@keyframes dlgIn { from { opacity:0; transform:scale(.94) translateY(18px); } }
+.synopsis-read { animation:dlgIn .3s ease-out backwards; }
 @keyframes fadeIn { from { opacity:0; } }
+@supports (transition-behavior:allow-discrete) and (overlay:auto) {
+  dialog {
+    opacity:0; transform:translateY(12px) scale(.97);
+    transition:opacity .2s ease, transform .26s cubic-bezier(.2,.8,.25,1.25),
+               display .26s allow-discrete, overlay .26s allow-discrete;
+  }
+  dialog[open] { opacity:1; transform:none; animation:none; }
+  dialog::backdrop {
+    background:#0000; animation:none;
+    transition:background-color .26s ease, display .26s allow-discrete, overlay .26s allow-discrete;
+  }
+  dialog[open]::backdrop { background:#000a; }
+  @starting-style {
+    dialog[open] { opacity:0; transform:translateY(18px) scale(.94); }
+    dialog[open]::backdrop { background:#0000; }
+  }
+}
 
 /* toast «registrado»: entra abajo, se queda 2.4 s y se va solo */
 .toast { position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom, 0px)); transform:translateX(-50%);
@@ -425,9 +509,10 @@ dialog::backdrop { animation: fadeIn .18s ease; }
 .scan-card-txt { display:flex; flex-direction:column; gap:4px; min-width:0; }
 
 /* selector de sección (mi estante / por comprar) */
-.seg { display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--bg); }
-.seg button { border:0; background:transparent; color:var(--dim); font:inherit; font-size:13px; padding:5px 10px; cursor:pointer; }
-.seg button.active { background:var(--mustard); color:#24180a; font-weight:600; }
+.seg { display:inline-flex; gap:3px; padding:3px; border:0; border-radius:14px; overflow:hidden; background:var(--panel);
+       box-shadow:0 5px 14px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06); }
+.seg button { border:0; border-radius:11px; background:transparent; color:var(--dim); font:inherit; font-size:13px; font-weight:600; padding:6px 12px; cursor:pointer; }
+.seg button.active { background:var(--mustard); color:#24180a; font-weight:700; box-shadow:0 3px 8px rgba(0,0,0,.28); }
 .seg button:active { filter:brightness(.92); }
 
 /* estante de compras: el MISMO mueble pero con otra madera (fría y gris) → se lee como OTRO estante */
@@ -448,18 +533,53 @@ dialog::backdrop { animation: fadeIn .18s ease; }
 .shelf-cap { max-width:980px; margin:0 auto 10px; font-size:12.5px; color:var(--dim); }
 @media (min-width:900px){ .shelf-cap { margin-bottom:14px; } }
 
-/* acciones pequeñas bajo «＋ reemplazar portada»: rellenas (no solo borde), mitad de ancho */
-.page-foot { display:flex; gap:8px; width:min(36vw, 330px); }
-.page-foot .btn { flex:1; margin:0; padding:9px 4px; font-size:12.5px;
-                  background:var(--panel); border:1px solid var(--line); border-radius:10px; color:var(--ink); }
+/* acciones pequeñas bajo «＋ reemplazar portada»: rellenas con sombra suave (sin borde), mitad de ancho */
+.page-foot { display:flex; gap:10px; width:min(36vw, 330px); }
+.page-foot .btn { flex:1; margin:0; padding:10px 8px; font-size:13px; font-weight:600;
+                  background:var(--panel); border:0; border-radius:14px; color:var(--ink);
+                  box-shadow:0 6px 16px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.07); }
 .page-foot .btn:active { background:var(--line); }
-.page-foot .btn.danger { color:var(--danger);
-                         border-color:color-mix(in srgb, var(--danger) 40%, var(--line));
-                         background:color-mix(in srgb, var(--danger) 10%, var(--panel)); }
-.btn.danger { border-color:var(--danger); color:var(--danger); }
-.btn.danger:active { background:color-mix(in srgb, var(--danger) 14%, transparent); }
+.page-foot .btn.danger, .btn.danger {
+  color:var(--danger); border:0;
+  background:color-mix(in srgb, var(--danger) 18%, var(--panel));
+  box-shadow:0 6px 16px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.btn.danger:active { filter:brightness(.92); }
 .del-book { margin-top:6px; margin-bottom:16px; font-size:14px; color:var(--dim); line-height:1.5; }
 /* CTA cuando un estante está vacío: debajo del mueble real, no en su lugar */
 .empty-cta { max-width:420px; margin:28px auto 0; }
 .empty-cta .btn { margin:0; }
 .empty-cta .gest { text-align:center; }
+
+/* carrusel de portadas por edición */
+.c-carousel { width:100%; margin-top:12px; display:flex; flex-direction:column; gap:8px; text-align:left; }
+.c-carousel-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.c-carousel-lbl { font-size:12.5px; font-weight:600; color:var(--dim); }
+.c-carousel-nav { display:flex; gap:5px; }
+.c-nav-btn { width:26px; height:26px; border-radius:999px; border:0; background:var(--panel); color:var(--ink);
+             font-size:15px; font-weight:700; line-height:1; cursor:pointer;
+             box-shadow:0 3px 8px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.07); }
+.c-nav-btn:active { transform:scale(.9); }
+.c-carousel-track { display:flex; gap:10px; overflow-x:auto; padding:4px 2px 8px;
+                    scroll-snap-type:x mandatory; scrollbar-width:thin; -webkit-overflow-scrolling:touch; }
+.c-card { flex:0 0 78px; display:flex; flex-direction:column; align-items:center; gap:5px;
+          padding:5px; border-radius:12px; border:0; background:var(--panel); color:var(--ink);
+          cursor:pointer; scroll-snap-align:start;
+          box-shadow:0 5px 14px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06); }
+.c-card.active { background:color-mix(in srgb, var(--mustard) 24%, var(--panel));
+                 box-shadow:0 0 0 2px var(--mustard), 0 7px 16px rgba(0,0,0,.35); }
+.c-card-imgwrap { width:100%; aspect-ratio:2/3; border-radius:8px; overflow:hidden; background:var(--bg); }
+.c-card-imgwrap img { width:100%; height:100%; object-fit:cover; display:block; }
+.c-card-pub { width:100%; font-size:11px; font-weight:600; color:var(--dim); text-align:center;
+              white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.c-card.active .c-card-pub { color:var(--ink); }
+
+@media (prefers-reduced-motion:reduce) {
+  *, *::before, *::after, dialog::backdrop {
+    animation-duration:.01ms !important; animation-iteration-count:1 !important;
+    transition-duration:.01ms !important; scroll-behavior:auto !important;
+  }
+  button:not(:disabled):hover, button:not(:disabled):active,
+  .shelfrow .tile:not(.slot):hover, .grid .tile:not(.slot):hover,
+  .shelfrow .tile:not(.slot):active, .grid .tile:not(.slot):active { transform:none !important; }
+}

@@ -49,13 +49,24 @@ export default function App() {
   const toastKey = useRef(0);
   const [fly, setFly] = useState(null);          // clon del libro volando de la balda al panel
   const [auth, setAuth] = useState(null);        // null = comprobando; luego { authed, user, required, mail }
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const logoutRef = useRef(null);
+  useEffect(() => {
+    const dialog = logoutRef.current;
+    if (!dialog) return;
+    if (logoutOpen && !dialog.open) dialog.showModal();
+    if (!logoutOpen && dialog.open) dialog.close();
+  }, [logoutOpen]);
   useEffect(() => { authMe().then(setAuth); }, []);
   const doLogout = async () => {
+    setLogoutOpen(false);
     await logout();
     setBooks([]); setDetail(null); setConfirmState(null); setSessionBoth(null);
     setAuth((a) => ({ ...a, authed: false, user: null }));
   };
   const [panelShow, setPanelShow] = useState(false); // el panel se revela al llegar el libro
+  const [vtId, setVtId] = useState(null);             // único libro con viewTransitionName en el estante
+  const reflowRef = useRef(0);
 
   const showToast = (kind, title, note = '') => {
     setToast({ id: ++toastKey.current, kind, title: title || (kind === 'add' ? 'Libro' : 'El libro'), note });
@@ -91,6 +102,16 @@ export default function App() {
     localStorage.setItem('biblioteca-perrow', String(n));
     setPerRowState(n);
   };
+  const reflowBooks = (update) => {
+    const token = ++reflowRef.current;
+    document.documentElement.classList.add('book-reflow');
+    const transition = vtx(update);
+    const finish = () => {
+      if (token === reflowRef.current) document.documentElement.classList.remove('book-reflow');
+    };
+    if (transition) transition.finished.then(finish, finish);
+    else finish();
+  };
 
   // ---- datos ----
   const refresh = useCallback(async () => {
@@ -102,22 +123,35 @@ export default function App() {
 
   // vuelve a la biblioteca: sin ficha, sin confirmación, sin sesión
   const goLibrary = () => {
-    setConfirmState(null); setDetail(null); setSessionBoth(null); setBusy(null); setFly(null); setPanelShow(false);
+    setConfirmState(null); setDetail(null); setSessionBoth(null); setBusy(null); setFly(null); setPanelShow(false); setVtId(null);
     document.body.classList.remove('typing');
     refresh();
   };
 
-  const openBook = async (b, e) => {
-    // leer la posición SÍNCRONO: React anula e.currentTarget en cuanto vuelve el handler
-    const rect = e && e.currentTarget ? e.currentTarget.getBoundingClientRect() : null;
-    let bk = b;
-    if (b.id) { try { bk = await api(`/api/books/${b.id}`); } catch { /* usa el resumen */ } }
+  const closeDetail = () => {
+    const returningId = detail?.id || null;
     if (matchMedia('(min-width:900px)').matches) {
-      // escritorio: el libro VUELA de la balda a la ficha (View Transition); la ficha no se mueve
-      vtx(() => { setDetail(bk); setPanelShow(true); setFly(null); });
+      vtx(() => { setVtId(returningId); setDetail(null); setPanelShow(false); setFly(null); });
     } else {
-      // móvil: el libro 3D vuela de la balda al panel
-      vtx(() => { setDetail(bk); setPanelShow(false); setFly(rect ? { id: bk.id, from: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } } : null); });
+      setDetail(null); setPanelShow(false); setFly(null); setVtId(null);
+    }
+  };
+
+  const openBook = (b, e) => {
+    const el = e && e.currentTarget ? e.currentTarget : null;
+    const rect = el ? el.getBoundingClientRect() : null;
+    if (matchMedia('(min-width:900px)').matches) {
+      // SOLO el libro tocado recibe viewTransitionName antes de la captura: el resto del estante
+      // no se extrae a capas ::view-transition y sus sombras nunca parpadean.
+      if (el && b.id) el.style.viewTransitionName = `b${b.id}`;
+      const prevId = detail?.id || null;
+      vtx(() => { setVtId(prevId); setDetail(b); setPanelShow(true); setFly(null); });
+    } else {
+      // móvil: FlyingBook hace el vuelo 3D directo sin snapshot de View Transition
+      setVtId(null);
+      setDetail(b);
+      setPanelShow(false);
+      setFly(rect ? { id: b.id, from: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } } : null);
     }
   };
 
@@ -280,6 +314,16 @@ export default function App() {
       showToast('move', displayTitle(book), to === 'buy' ? 'a "por comprar"' : 'a mi biblioteca');
     } catch { setBusy(null); }
   };
+  const editPublisher = async (book, publisher) => {
+    try {
+      const updated = await api(`/api/books/${book.id}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ publisher }),
+      });
+      setDetail(updated);
+      refresh();
+    } catch { /* ignorar */ }
+  };
 
   // ---- diálogo «＋» ----
   const openNew = () => { setSessionBoth(null); setConfirmState(null); setBusy(null); setDialogOpen(true); };
@@ -292,13 +336,21 @@ export default function App() {
   const backToStart = () => { setSessionBoth(null); setConfirmState(null); setBusy(null); setDialogOpen(true); };
   const doneExisting = () => { if (sessionRef.current?._modal) setDialogOpen(false); goLibrary(); };
 
-  const retryCover = async (book) => {
-    setBusy({ text: 'buscando portada…', modal: false, search: true });
+  const selectOnlineCover = async (book, ed) => {
+    setBusy({ text: 'aplicando portada…', modal: false });
     try {
-      const r = await fetch(`/api/books/${book.id}/cover`, { method: 'POST' }).then((x) => x.json());
-      goLibrary();
-      showToast('info', displayTitle(book), r.cover ? '¡portada encontrada!' : 'sin portada online · puedes subirla tú');
-    } catch { setBusy(null); showToast('info', displayTitle(book), 'no se pudo buscar la portada'); }
+      const r = await api(`/api/books/${book.id}/select-cover`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ cover_url: ed.cover_url, publisher: ed.publisher || book.publisher }),
+      });
+      setBusy(null);
+      if (r.book) setDetail(r.book);
+      refresh();
+      showToast('info', displayTitle(book), ed.publisher ? `Portada · ${ed.publisher}` : '¡portada actualizada!');
+    } catch {
+      setBusy(null);
+      showToast('info', displayTitle(book), 'no se pudo aplicar la portada');
+    }
   };
 
   const modal = !!session?._modal;
@@ -321,7 +373,7 @@ export default function App() {
   const libraryView = !loaded ? null
     : books.length === 0 ? (view === 'shelf' ? (
       <>
-        <ShelfView books={books} perRow={perRow} onOpen={openBook} onAddCover={addCoverTo} buy={section === 'buy'} holeId={holeId} />
+        <ShelfView books={books} perRow={perRow} onOpen={openBook} onAddCover={addCoverTo} buy={section === 'buy'} holeId={holeId} vtId={vtId} />
         <div className="empty-cta">
           <button type="button" className="btn" onClick={pickPhoto}>
             {section === 'buy' ? 'Escanear un libro para comprar' : 'Escanear un libro'}
@@ -331,18 +383,18 @@ export default function App() {
       </>
     ) : <EmptyShelf onScan={pickPhoto} buy={section === 'buy'} />)
     : view === 'shelf'
-      ? <ShelfView books={books} perRow={perRow} onOpen={openBook} onAddCover={addCoverTo} buy={section === 'buy'} holeId={holeId} />
-      : <GridView books={books} onOpen={openBook} onAddCover={addCoverTo} holeId={holeId} />;
+      ? <ShelfView books={books} perRow={perRow} onOpen={openBook} onAddCover={addCoverTo} buy={section === 'buy'} holeId={holeId} vtId={vtId} />
+      : <GridView books={books} onOpen={openBook} onAddCover={addCoverTo} holeId={holeId} vtId={vtId} />;
 
   return (
     <>
       <Header
-        view={view} onView={(v) => vtx(() => setView(v))}
+        view={view} onView={(v) => reflowBooks(() => setView(v))}
         theme={theme} onCycleTheme={cycleTheme}
         section={section} onSection={changeSection}
-        perRow={perRow} maxPerRow={maxPerRow} onPerRow={(v) => vtx(() => setPerRow(v))}
+        perRow={perRow} maxPerRow={maxPerRow} onPerRow={(v) => reflowBooks(() => setPerRow(v))}
         onAdd={openNew}
-        onLogout={auth.required ? doLogout : null}
+        onLogout={() => setLogoutOpen(true)}
         user={auth.user}
       />
 
@@ -360,7 +412,7 @@ export default function App() {
             <div className="split">
               <div className="split-shelf">{libraryView}</div>
               {detail
-                ? <BookDetail book={detail} visible={panelShow} onBack={() => vtx(goLibrary)} onAddCover={addCoverTo} onDelete={setDeleteTarget} onMove={moveSection} onRetryCover={retryCover} />
+                ? <BookDetail key={detail.id} book={detail} visible={panelShow} onBack={closeDetail} onAddCover={addCoverTo} onDelete={setDeleteTarget} onMove={moveSection} onSelectCover={selectOnlineCover} onEditPublisher={editPublisher} />
                 : <aside className="detail-panel" aria-hidden="true" />}
             </div>
           )}
@@ -368,7 +420,7 @@ export default function App() {
 
       <div className="room-floor" aria-hidden="true" />
 
-      {panelShow && <div className="panel-fade" onClick={() => vtx(goLibrary)} aria-hidden="true" />}
+      {panelShow && <div className="panel-fade" onClick={closeDetail} aria-hidden="true" />}
       {fly && <FlyingBook key={fly.id} book={detail} fly={fly} onArrive={() => setPanelShow(true)} onDone={() => setFly(null)} />}
 
       <button className="fab" aria-label="Escanear un libro" onClick={openNew}>＋</button>
@@ -415,6 +467,20 @@ export default function App() {
           onRemoveAll={removeAllCopies}
         />
       )}
+
+      <dialog ref={logoutRef} className="logout-dlg" aria-labelledby="logout-title" onClose={() => setLogoutOpen(false)} onClick={(e) => { if (e.target === e.currentTarget) setLogoutOpen(false); }}>
+        <div className="nd">
+          <h2 id="logout-title" className="nd-title">Cerrar sesión</h2>
+          <p className="del-book">
+            ¿Seguro que quieres salir de tu biblioteca{auth.user ? <> (<b>{auth.user}</b>)</> : ''}?
+            Tendrás que pedir un nuevo enlace para volver a entrar.
+          </p>
+          <div className="actions">
+            <button type="button" className="btn danger" onClick={doLogout}>Sí, cerrar sesión</button>
+            <button type="button" className="btn ghost" onClick={() => setLogoutOpen(false)} autoFocus>Cancelar</button>
+          </div>
+        </div>
+      </dialog>
     </>
   );
 }

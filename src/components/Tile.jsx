@@ -1,11 +1,12 @@
 import { displayTitle, locText } from '../lib/book.js';
 
 // Un azulejo de libro. Con portada: solo la tapa. Sin portada: el título ES la portada.
-export default function Tile({ book, showBand = true, onOpen, onAddCover, className = '' }) {
+export default function Tile({ book, showBand = true, onOpen, onAddCover, className = '', vtActive = false }) {
   const hasCover = !!(book.cover_front || book.cover_url);
   const title = displayTitle(book);
   const style = {};
-  if (book.id) style.viewTransitionName = `b${book.id}`; // morph ficha ↔ balda
+  if (book.id) style['--book-transition'] = `b${book.id}`;
+  if (vtActive && book.id) style.viewTransitionName = `b${book.id}`; // morph SOLO del libro activo
   const saved = !!book.id;
   if (book.cover_front) { style.backgroundImage = `url("/${book.cover_front}")`; style.backgroundSize = 'cover'; }
   else if (book.cover_url) { style.backgroundImage = `url("${book.cover_url}")`; style.backgroundSize = 'cover'; }

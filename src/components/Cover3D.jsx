@@ -5,7 +5,7 @@ import {
   Texture, CanvasTexture, SRGBColorSpace,
 } from 'three';
 import { displayTitle, blurbText } from '../lib/book.js';
-import { wrapSynopsis, averageColor, hexToRgb } from '../lib/synopsis.js';
+import { synopsisPreview, averageColor, hexToRgb } from '../lib/synopsis.js';
 
 // Título de contraportada: encoje la fuente hasta que el título complete entre en ≤2 líneas
 // dentro del ancho útil (medido, no a ciegas). Solo si ni a 56px cabe, corta con « … ».
@@ -39,7 +39,7 @@ function fitTitle(c, raw, maxWidth, maxLines) {
 // Contraportada: canvas 1280×2048 con el título arriba y la sinopsis envuelta debajo,
 // sobre el color dominante de la portada (oscurecido para que el texto respire).
 // El texto es GRANDE (≈84px en la textura): al mostrarse en el panel queda legible (~20px),
-// por eso se recorta a ~12 líneas de ~24 caracteres en vez de meter la sinopsis entera.
+// por eso se recorta a ~8 líneas de ~24 caracteres en vez de meter la sinopsis entera.
 function backCanvas(title, lines, bg, ink) {
   const cv = document.createElement('canvas'); cv.width = 1280; cv.height = 2048;
   const c = cv.getContext('2d');
@@ -152,7 +152,7 @@ export default function Cover3D({ book, style }) {
       img.onload = () => {
         setTexture(new Texture(img));
         const base = averageColor(img);
-        if (base) paintBack(wrapSynopsis(blurbText(book.description), 12, 24), base);
+        if (base) paintBack(synopsisPreview(blurbText(book.description, book)), base);
       };
       img.onerror = () => setTexture(null);
       img.src = src;
@@ -176,7 +176,7 @@ export default function Cover3D({ book, style }) {
       back.needsUpdate = true;
     };
     const fallbackBase = hexToRgb(book.strip_color) || { r: 36, g: 23, b: 8 };
-    const backLines = wrapSynopsis(blurbText(book.description), 12, 24); // letra GRANDE → menos líneas, legible
+    const backLines = synopsisPreview(blurbText(book.description, book));
     paintBack(backLines, fallbackBase);
 
     // --- entradas: dedo (spin + tap para voltear), ratón (parallax), giroscopio ---
@@ -217,8 +217,16 @@ export default function Cover3D({ book, style }) {
       pointer.has = true;
     };
     const onUp = () => {
-      if (drag && !moved && performance.now() - down.t < 500) flipped = !flipped; // tap → media vuelta
+      if (drag && !moved && performance.now() - down.t < 500) {
+        flipped = !flipped;
+      }
       drag = null;
+    };
+    const onKey = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        flipped = !flipped;
+      }
     };
     const onLeave = () => { pointer.has = false; };
     host.addEventListener('pointerdown', onDown);
@@ -226,6 +234,7 @@ export default function Cover3D({ book, style }) {
     host.addEventListener('pointerup', onUp);
     host.addEventListener('pointercancel', onUp);
     host.addEventListener('pointerleave', onLeave);
+    host.addEventListener('keydown', onKey);
 
     // giroscopio: gamma (izq/der) → rotY, beta (adelante/atrás) → rotX.
     const onOrientation = (e) => {
@@ -284,6 +293,7 @@ export default function Cover3D({ book, style }) {
       host.removeEventListener('pointerup', onUp);
       host.removeEventListener('pointercancel', onUp);
       host.removeEventListener('pointerleave', onLeave);
+      host.removeEventListener('keydown', onKey);
       if (removeOri) removeOri();
       if (texture) texture.dispose();
       for (const m of sceneMeshes) {
@@ -294,7 +304,7 @@ export default function Cover3D({ book, style }) {
       renderer.dispose();
       host.removeChild(renderer.domElement);
     };
-  }, [book.id, src]);
+  }, [book.id, src, book.publisher, book.description]);
 
   // degradado (sin WebGL): la portada estática de siempre
   if (failed) {
@@ -310,7 +320,7 @@ export default function Cover3D({ book, style }) {
   }
 
   return (
-    <div className="bcover bcover3d" style={style} ref={hostRef}>
+    <div className="bcover bcover3d" style={style} ref={hostRef} role="button" tabIndex={0} aria-label="Girar el libro">
       {!hasCover && <div className="lbl">{displayTitle(book)}</div>}
     </div>
   );

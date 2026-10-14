@@ -26,6 +26,14 @@ export function wrapSynopsis(text, maxLines = 20, charsPerLine = CHARS_PER_LINE)
   return lines;
 }
 
+export function synopsisPreview(text, maxLines = 8, charsPerLine = 24) {
+  const lines = wrapSynopsis(text, maxLines, charsPerLine);
+  if (!lines || !lines.at(-1).endsWith(' …')) return lines;
+  const excerpt = lines.join(' ').slice(0, -2).trim();
+  const sentence = excerpt.match(/^.*[.!?](?=\s|$)/s)?.[0];
+  return sentence ? wrapSynopsis(`${sentence} …`, maxLines, charsPerLine) : lines;
+}
+
 // color promedio de una imagen YA cargada (para que la contraportada «calse» con la portada).
 // Recibe el elemento, no una URL: así no se descarga la portada dos veces.
 export function averageColor(img) {

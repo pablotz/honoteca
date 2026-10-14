@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { join, resolve, sep } from 'node:path';
 import { add_book, get_book, list_books, update_book, update_title, find_by_isbn, escalateNeedsReview, clearNeedsReview, remove_book, coverStillUsed, tx, cleanIsbn, TITLE_FIELDS as DB_TITLE_FIELDS } from './db.js';
 import { uploadPhoto, COVERS, TMP } from './upload.js';
-import { lookup_isbn, cover_by_title, search_by_title, gbDescription, esWikiIntro } from './meta.js';
+import { lookup_isbn, cover_by_title, search_by_title, search_editions, resolveDescription, isEnglishText, isEnglishPublisher } from './meta.js';
 
 const BACK = join(COVERS, 'back');
 const FRONT = join(COVERS, 'front');
@@ -116,13 +116,7 @@ api.get('/books', (req, res) => {
 api.get('/search', async (req, res) => {
   try {
     const hit = await search_by_title(req.query.q || '');
-    // sinopsis en el idioma de la edición, igual que en /meta
-    if (hit && (hit.description || hit.title_native)) {
-      const gd = hit.isbn ? await gbDescription(hit.isbn) : null;
-      const wi = await esWikiIntro(hit.title_native);
-      if (gd) hit.description = gd;
-      else if (wi) hit.description = wi;
-    }
+    if (hit) hit.description = await resolveDescription(hit, hit.isbn);
     res.json({ hit });
   } catch {
     res.json({ hit: null });
@@ -213,6 +207,60 @@ api.post('/books/:id/cover', async (req, res) => {
   }
 });
 
+// Carrusel de portadas para un libro ya guardado: busca ediciones con portada por ISBN o título.
+api.get('/books/:id/covers', async (req, res) => {
+  try {
+    const b = get_book(req.params.id, req.user);
+    if (!b) return res.status(404).json({ error: 'no existe' });
+    const editions = await search_editions({ isbn: b.isbn, title: b.title_native || b.title_romaji, author: b.authors?.[0] });
+    res.json({ editions });
+  } catch (e) {
+    res.status(502).json({ error: String(e.message || e), editions: [] });
+  }
+});
+
+// Elegir una portada del carrusel: la baja a disco (covers/front/<id>.jpg) y actualiza portada (+ editorial opcional).
+api.post('/books/:id/select-cover', async (req, res) => {
+  try {
+    const b = get_book(req.params.id, req.user);
+    if (!b) return res.status(404).json({ error: 'no existe' });
+    const { cover_url, publisher } = req.body || {};
+    let url;
+    try { url = new URL(cover_url); } catch { return res.status(400).json({ error: 'cover_url inválido' }); }
+    if (url.origin !== 'https://covers.openlibrary.org' || url.username || url.password
+        || !/^\/b\/id\/[1-9]\d*-L\.jpg$/.test(url.pathname) || url.search || url.hash) {
+      return res.status(400).json({ error: 'cover_url inválido' });
+    }
+    const name = safeName(b.id);
+    if (!name) throw new Error('id inválido');
+    // Solo portadas del catálogo; no seguir redirecciones hacia otros servidores.
+    const r = await fetch(url.href, { signal: AbortSignal.timeout(8000), redirect: 'error' });
+    if (!r.ok) throw new Error('no se pudo descargar la portada');
+    const maxBytes = 5 * 1024 * 1024;
+    if (Number(r.headers.get('content-length')) > maxBytes) {
+      await r.body?.cancel();
+      throw new Error('portada demasiado grande');
+    }
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of r.body) {
+      size += chunk.byteLength;
+      if (size > maxBytes) throw new Error('portada demasiado grande');
+      chunks.push(chunk);
+    }
+    const buf = Buffer.concat(chunks);
+    if (!looksLikeCover(buf)) throw new Error('imagen de portada inválida');
+    const localRel = `covers/front/${name}.jpg`;
+    writeFileSync(join(FRONT, `${name}.jpg`), buf);
+    const patch = { cover_front: localRel, cover_url: url.href };
+    if (publisher) patch.publisher = String(publisher).trim();
+    applyTitle(b.isbn, b.id, patch, req.user);
+    res.json({ ok: true, book: get_book(b.id, req.user) });
+  } catch (e) {
+    res.status(400).json({ error: String(e.message || e) });
+  }
+});
+
 // metadatos por ISBN: openbd → NDL → Open Library → Google Books.
 // Siempre 200: devuelve hit (o null) + el reporte por fuente (hit/miss/skipped/error),
 // para que «no lo tiene» y «no se pudo preguntar» no se lean igual.
@@ -228,15 +276,15 @@ api.get('/meta/:isbn', async (req, res) => {
   try {
     const { hit, report } = await lookup_isbn(isbn);
     if (hit) {
-      hit.cover_front = await coverForHit(hit, isbn);
-      // sinopsis en el idioma de la edición (ES para ejemplares en español): Google primero
-      // (cuota), Wikipedia en español como red. Deja la de OL solo si ambas fallan.
-      if (hit.description || hit.title_native) {
-        const gd = await gbDescription(isbn);
-        const wi = await esWikiIntro(hit.title_native);
-        if (gd) hit.description = gd;
-        else if (wi) hit.description = wi;
-      }
+      const [coverFront, editions] = await Promise.all([
+        coverForHit(hit, isbn),
+        search_editions({ isbn, title: hit.title_native, author: hit.authors?.[0] }),
+      ]);
+      hit.cover_front = coverFront;
+      hit.editions = editions;
+      if (!hit.publisher && editions[0]?.publisher) hit.publisher = editions[0].publisher;
+      // Regla de idioma: sinopsis en inglés SOLO si la editorial es inglesa; si no, español.
+      hit.description = await resolveDescription(hit, isbn);
     }
     if (metaCache.size > 500) metaCache.clear(); // techo de memoria
     metaCache.set(isbn, { at: Date.now(), hit: hit || null, report });
@@ -296,6 +344,9 @@ api.post('/confirm', (req, res) => {
   if (!['A', 'B', 'C', 'D'].includes(state)) return res.status(400).json({ error: 'state inválido' });
   try {
     const { title, perCopy } = splitFields(book);
+    if (title.description && isEnglishText(title.description) && !isEnglishPublisher(title.publisher, perCopy.isbn)) {
+      title.description = null;
+    }
     // needs_review NO va acá: solo sube (ver finalize). Un patch de título nunca la borra.
     const titlePatch = { ...title, ...stripFields(strip) };
 

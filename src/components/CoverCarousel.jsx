@@ -1,0 +1,60 @@
+import { useRef, useState } from 'react';
+
+// Carrusel horizontal de portadas por edición: tocar una miniatura cambia tanto la portada
+// como la editorial asociada. Descarta automáticamente portadas vacías (1x1 de Open Library).
+export default function CoverCarousel({ editions = [], selectedUrl, onSelect, label = 'Elige la portada de tu edición' }) {
+  const trackRef = useRef(null);
+  const [hidden, setHidden] = useState({});
+
+  const visible = editions.filter((e) => e && e.cover_url && !hidden[e.cover_url]);
+  if (visible.length === 0) return null;
+
+  const scroll = (dir) => {
+    const el = trackRef.current;
+    if (el) el.scrollBy({ left: dir * 210, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+  };
+
+  return (
+    <div className="c-carousel">
+      <div className="c-carousel-head">
+        <span className="c-carousel-lbl">{label} ({visible.length})</span>
+        {visible.length > 3 && (
+          <div className="c-carousel-nav">
+            <button type="button" className="c-nav-btn" onClick={() => scroll(-1)} aria-label="Anterior">‹</button>
+            <button type="button" className="c-nav-btn" onClick={() => scroll(1)} aria-label="Siguiente">›</button>
+          </div>
+        )}
+      </div>
+      <div className="c-carousel-track" ref={trackRef}>
+        {visible.map((ed) => {
+          const active = selectedUrl === ed.cover_url;
+          return (
+            <button
+              key={ed.cover_url}
+              type="button"
+              className={`c-card${active ? ' active' : ''}`}
+              aria-pressed={active}
+              onClick={() => onSelect(ed)}
+              title={ed.publisher ? `Editorial: ${ed.publisher}` : 'Elegir esta portada'}
+            >
+              <div className="c-card-imgwrap">
+                <img
+                  src={ed.cover_url}
+                  alt={ed.publisher || 'Portada'}
+                  loading="lazy"
+                  onLoad={(e) => {
+                    if (e.currentTarget.naturalWidth < 20) {
+                      setHidden((h) => ({ ...h, [ed.cover_url]: true }));
+                    }
+                  }}
+                  onError={() => setHidden((h) => ({ ...h, [ed.cover_url]: true }))}
+                />
+              </div>
+              <span className="c-card-pub">{ed.publisher || 'Otra edición'}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { wrapSynopsis, CHARS_PER_LINE, hexToRgb } from './synopsis.js';
+import { wrapSynopsis, synopsisPreview, CHARS_PER_LINE, hexToRgb } from './synopsis.js';
 
 test('wrapSynopsis: devuelve null sin texto', () => {
   assert.equal(wrapSynopsis(null), null);
@@ -35,4 +35,14 @@ test('hexToRgb: parsea hex, null si no lo es', () => {
   assert.deepEqual(hexToRgb('#a06b20'), { r: 160, g: 107, b: 32 });
   assert.equal(hexToRgb('nope'), null);
   assert.equal(hexToRgb(null), null);
+});
+
+test('synopsisPreview keeps short text and ends long previews at a complete sentence', () => {
+  assert.equal(synopsisPreview(null), null);
+  assert.equal(synopsisPreview('Una historia breve.').join(' '), 'Una historia breve.');
+  const text = 'Una historia breve. ' + 'Esta segunda frase sigue sin terminar '.repeat(20);
+  assert.equal(synopsisPreview(text).join(' '), 'Una historia breve. …');
+  const lines = synopsisPreview('palabra '.repeat(100));
+  assert.ok(lines.length <= 8);
+  assert.ok(lines.at(-1).endsWith(' …'));
 });

@@ -37,6 +37,16 @@ test('blurbText: quita HTML, colapsa saltos y devuelve null si queda vacío', ()
   assert.equal(blurbText(null), null);
 });
 
+test('blurbText: solo muestra sinopsis en inglés si la editorial es inglesa', () => {
+  const en = 'At school Connell and Marianne pretend not to know each other while the world around them changes.';
+  const es = 'Una novela extraordinaria sobre la vida y la historia de dos jóvenes en el mundo actual.';
+  assert.equal(blurbText(en, { isbn: '9780061120084', publisher: 'HarperCollins' }), en);
+  assert.equal(blurbText(en, { isbn: '9786073198288', publisher: 'Literatura Random House' }), null);
+  assert.equal(blurbText(en, { isbn: '9788425451096', publisher: null }), null);
+  assert.equal(blurbText(en, { isbn: '9780241997062', publisher: 'Penguin Books' }), en);
+  assert.equal(blurbText(es, { isbn: '9786073198288', publisher: 'Planeta' }), es);
+});
+
 test('locText: etiqueta de ubicación', () => {
   assert.equal(locText({ shelf: 'A', row: 2, pos: 3 }), 'A · fila 2 · 3.º');
 });

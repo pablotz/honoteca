@@ -17,7 +17,7 @@ export default function Login({ mail }) {
   return (
     <div className="login">
       <form className="login-card" onSubmit={submit}>
-        <div className="login-brand">Honoteca</div>
+        <h1 className="login-brand">Honoteca</h1>
         {sent ? (
           <>
             <p className="login-msg">Te mandé un enlace a <b>{email}</b>. Ábrelo en este dispositivo.</p>
