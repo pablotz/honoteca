@@ -6,9 +6,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { api } from './api.js';
-import { auth, requireAuth, authOn } from './auth.js';
-import { purgeTmp } from './upload.js';
-import { _db_path } from './db.js';
+import { auth, requireAuth, authOn, allowedEmails } from './auth.js';
+import { COVERS, purgeTmp } from './upload.js';
+import { _db_path, claimUnownedBooks } from './db.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(root, 'dist');
@@ -22,10 +22,11 @@ const PORT = Number(process.env.PORT || (args.includes('--port') ? args[args.ind
 const HOST = process.env.HOST || '0.0.0.0';
 
 // Guardarraíl de despliegue: en producción NO se arranca sin login configurado.
-if (process.env.NODE_ENV === 'production' && !process.env.OWNER_EMAIL) {
-  console.error('[honoteca] NODE_ENV=production sin OWNER_EMAIL: la app quedaría ABIERTA. Define OWNER_EMAIL (y AUTH_SECRET).');
+if (process.env.NODE_ENV === 'production' && !authOn()) {
+  console.error('[honoteca] NODE_ENV=production sin ALLOWED_EMAILS / OWNER_EMAIL: la app quedaría ABIERTA.');
   process.exit(1);
 }
+if (authOn()) claimUnownedBooks(allowedEmails()[0]);
 
 const app = express();
 
@@ -36,12 +37,14 @@ if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
 app.use(express.json({ limit: '2mb' }));
 
 // fotos servidas como archivos (nunca BLOB/base64 al leer).
-// no-store: un cover cacheado en el navegador tras un cambio (placeholder→real) no se
-// refresca con max-age=0 en todos los clientes; sin caché, lo que ves es lo que hay.
+// no-cache (revalidar, no «no-store»): un cover cacheado no se queda viejo —express.static
+// manda ETag, así que si el fichero cambió llega 200 y si no, un 304 sin cuerpo— pero el
+// navegador SÍ reutiliza la imagen ya decodificada. Con no-store la ficha volvía a bajarse
+// cada portada y la tapa aparecía un instante después (parpadeo al abrir el libro).
 // nosniff: el navegador no debe adivinar el tipo (un archivo subido no se ejecuta).
-app.use('/covers', requireAuth, express.static(join(root, 'covers'), {
+app.use('/covers', requireAuth, express.static(COVERS, {
   setHeaders: (res) => {
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Cache-Control', 'private, no-cache');
     res.setHeader('X-Content-Type-Options', 'nosniff');
   },
 }));
@@ -63,7 +66,7 @@ app.listen(PORT, HOST, () => {
   console.log(`Honoteca — http://${HOST}:${PORT}`);
   console.log(`  db:     ${_db_path}`);
   console.log(`  static: ${DIST}`);
-  console.log(`  auth:   ${authOn() ? `magic link (solo ${process.env.OWNER_EMAIL})` : 'ABIERTA — define OWNER_EMAIL para protegerla'}`);
+  console.log(`  auth:   ${authOn() ? `whitelist (${allowedEmails().join(', ')})` : 'ABIERTA — define ALLOWED_EMAILS para protegerla'}`);
   if (authOn() && !process.env.AUTH_SECRET) {
     console.warn('  aviso:  sin AUTH_SECRET las sesiones se firman con un secreto aleatorio y se pierden al reiniciar.');
   }

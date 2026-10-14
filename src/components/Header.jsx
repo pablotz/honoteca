@@ -1,6 +1,6 @@
 // Cabecera: sección (mi estante / por comprar), vistas, tema, libros por balda, escanear.
 // La sección NO pregunta al guardar: lo escaneado cae en el estante que esté activo aquí.
-export default function Header({ view, onView, theme, onCycleTheme, section, onSection, perRow, maxPerRow, onPerRow, onAdd, onLogout }) {
+export default function Header({ view, onView, theme, onCycleTheme, section, onSection, perRow, maxPerRow, onPerRow, onAdd, onLogout, user }) {
   return (
     <header>
       <button type="button" className={`ico${view === 'shelf' ? ' active' : ''}`} title="Estante" onClick={() => onView('shelf')}>≡</button>
@@ -15,7 +15,7 @@ export default function Header({ view, onView, theme, onCycleTheme, section, onS
         <b>{perRow}</b>
       </label>
       <span className="grow" />
-      {onLogout && <button type="button" className="ico" title="Salir" onClick={onLogout}>⏻</button>}
+      {onLogout && <button type="button" className="ico" title={user ? `Salir (${user})` : 'Salir'} onClick={onLogout}>⏻</button>}
       <button className="add" title="Escanear un libro" onClick={onAdd}>＋</button>
     </header>
   );

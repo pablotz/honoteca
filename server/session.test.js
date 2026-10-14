@@ -2,15 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { signSession, verifySession, newLoginToken, hashToken } from './session.js';
 
-test('sesión: firma válida pasa, caducada y manipulada no', () => {
+test('sesión: firma válida devuelve el email; caducada o manipulada devuelve null', () => {
   process.env.AUTH_SECRET = 'test-secret';
-  const ok = signSession(60_000);
-  assert.equal(verifySession(ok), true);
-  assert.equal(verifySession(signSession(-1)), false);          // ya caducada
-  assert.equal(verifySession(ok.replace(/\..*/, '.deadbeef')), false); // firma cambiada
-  assert.equal(verifySession(''), false);
-  assert.equal(verifySession(null), false);
-  assert.equal(verifySession('123.abc'), false);
+  const ok = signSession('ana.perez@example.com', 60_000);
+  assert.equal(verifySession(ok), 'ana.perez@example.com');
+  assert.equal(verifySession(signSession('ana.perez@example.com', -1)), null); // ya caducada
+  assert.equal(verifySession(ok.replace(/\.[^.]+$/, '.deadbeef')), null);      // firma cambiada
+  assert.equal(verifySession(''), null);
+  assert.equal(verifySession(null), null);
+  assert.equal(verifySession('123.abc'), null);
 });
 
 test('token de enlace: aleatorio y con hash estable', () => {

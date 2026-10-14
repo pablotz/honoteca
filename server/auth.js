@@ -1,9 +1,10 @@
-// server/auth.js — acceso por MAGIC LINK (correo). Sin cuentas ni contraseñas: pides un enlace
-// a tu propio correo (OWNER_EMAIL), lo abres y quedas con una cookie de sesión firmada.
+// server/auth.js — acceso por MAGIC LINK (correo) con whitelist y biblioteca por usuario.
+// Sin cuentas ni contraseñas: pides un enlace a tu correo (en ALLOWED_EMAILS / OWNER_EMAIL),
+// lo abres y quedas con una cookie de sesión firmada que identifica tu estante.
 //
 // Interruptores (todo por env, sin tocar código):
-//   OWNER_EMAIL     — el ÚNICO correo que puede entrar. Sin esta var, la app queda ABIERTA
-//                     (cómodo en LAN/dev; en un host público DEBES ponerla).
+//   ALLOWED_EMAILS  — lista de correos separados por coma (o OWNER_EMAIL para uno solo).
+//                     Sin esta var, la app queda ABIERTA en modo local (owner='').
 //   AUTH_SECRET     — secreto para firmar sesiones (pon uno largo en producción).
 //   RESEND_API_KEY  — para enviar el correo. Sin ella, el enlace se imprime en el log del
 //                     server (así se prueba en local sin proveedor).
@@ -11,14 +12,17 @@
 //   APP_URL         — base para el enlace (si no, se deduce del request / x-forwarded-proto).
 import { Router } from 'express';
 import { newLoginToken, hashToken, signSession, verifySession } from './session.js';
-import { createLoginToken, consumeLoginToken, purgeLoginTokens } from './db.js';
+import { createLoginToken, consumeLoginToken, purgeLoginTokens, claimUnownedBooks } from './db.js';
 
 const LINK_TTL = 15 * 60 * 1000;              // el enlace caduca en 15 min
 const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // la sesión dura 30 días
 const COOKIE = 'honoteca_session';
 
-export const authOn = () => Boolean(process.env.OWNER_EMAIL);
-const owner = () => String(process.env.OWNER_EMAIL || '').trim().toLowerCase();
+export function allowedEmails() {
+  const raw = [process.env.ALLOWED_EMAILS, process.env.OWNER_EMAIL].filter(Boolean).join(',');
+  return [...new Set(raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))];
+}
+export const authOn = () => allowedEmails().length > 0;
 
 function baseUrl(req) {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, '');
@@ -29,7 +33,7 @@ function baseUrl(req) {
 async function sendLink(email, url) {
   const key = process.env.RESEND_API_KEY;
   if (!key) { // dev: sin proveedor, el enlace sale por consola
-    console.warn(`[honoteca] sin RESEND_API_KEY — enlace de acceso (15 min):\n  ${url}`);
+    console.warn(`[honoteca] sin RESEND_API_KEY — enlace de acceso para ${email} (15 min):\n  ${url}`);
     return;
   }
   const from = process.env.RESEND_FROM || 'Honoteca <onboarding@resend.dev>';
@@ -49,23 +53,33 @@ async function sendLink(email, url) {
 const cookieHeader = (value, secure, maxAgeSec) =>
   `${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSec}${secure ? '; Secure' : ''}`;
 
-export function isAuthed(req) {
-  if (!authOn()) return true; // sin OWNER_EMAIL → abierto (LAN/dev)
+// Devuelve '' en modo abierto (LAN/dev), el email si la sesión es válida y está en la whitelist, o null si no.
+export function sessionUser(req) {
+  const list = allowedEmails();
+  if (!list.length) return '';
   const raw = req.headers.cookie || '';
   const m = raw.match(new RegExp(`(?:^|;\\s*)${COOKIE}=([^;]+)`));
-  return verifySession(m ? decodeURIComponent(m[1]) : '');
+  const email = verifySession(m ? decodeURIComponent(m[1]) : '');
+  return email && list.includes(email) ? email : null;
 }
 
-// Guardarraíl para las rutas privadas (/api salvo /api/auth, y /covers)
+export const isAuthed = (req) => sessionUser(req) !== null;
+
+// Guardarraíl para las rutas privadas (/api salvo /api/auth, y /covers): fija req.user
 export function requireAuth(req, res, next) {
-  if (isAuthed(req)) return next();
-  res.status(401).json({ error: 'no autorizado' });
+  const user = sessionUser(req);
+  if (user === null) return res.status(401).json({ error: 'no autorizado' });
+  req.user = user;
+  next();
 }
 
 export const auth = Router();
 
 // ¿ya entré? (y si el correo está configurado, para que la pantalla muestre el aviso correcto)
-auth.get('/auth/me', (req, res) => res.json({ authed: isAuthed(req), required: authOn(), mail: Boolean(process.env.RESEND_API_KEY) }));
+auth.get('/auth/me', (req, res) => {
+  const user = sessionUser(req);
+  res.json({ authed: user !== null, user: user || null, required: authOn(), mail: Boolean(process.env.RESEND_API_KEY) });
+});
 
 // Límite por IP: pedir enlaces es gratis para quien lo pide y caro para ti (correo + cuota).
 // Ventana simple en memoria: 5 intentos cada 15 min. Al pasarse se responde igual (uniforme).
@@ -81,29 +95,31 @@ function rateLimited(ip) {
   return list.length > RL_MAX;
 }
 
-// pedir enlace. Respuesta uniforme: nunca revela si el correo coincide.
+// pedir enlace. Respuesta uniforme: nunca revela si el correo está en la whitelist.
 auth.post('/auth/request', async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
-  const to = owner();
-  if (to && email === to && !rateLimited(req.ip || '?')) {
+  const list = allowedEmails();
+  if (email && list.includes(email) && !rateLimited(req.ip || '?')) {
     try {
       purgeLoginTokens();
       const token = newLoginToken();
-      createLoginToken(hashToken(token), Date.now() + LINK_TTL);
-      await sendLink(to, `${baseUrl(req)}/api/auth/verify?token=${encodeURIComponent(token)}`);
+      createLoginToken(hashToken(token), Date.now() + LINK_TTL, email);
+      await sendLink(email, `${baseUrl(req)}/api/auth/verify?token=${encodeURIComponent(token)}`);
     } catch (e) { console.error('[honoteca] no se pudo enviar el enlace:', e.message); }
   }
   res.json({ ok: true });
 });
 
-// abrir el enlace → cookie de sesión
+// abrir el enlace → cookie de sesión firmada con ese correo
 auth.get('/auth/verify', (req, res) => {
   const token = String(req.query.token || '');
-  if (!token || !consumeLoginToken(hashToken(token))) {
+  const email = token ? consumeLoginToken(hashToken(token)) : false;
+  if (typeof email !== 'string' || !allowedEmails().includes(email)) {
     return res.status(400).send('Enlace inválido, ya usado o caducado. Pide uno nuevo.');
   }
+  if (allowedEmails()[0] === email) claimUnownedBooks(email);
   const secure = (req.headers['x-forwarded-proto'] || req.protocol) === 'https';
-  res.setHeader('Set-Cookie', cookieHeader(signSession(SESSION_TTL), secure, SESSION_TTL / 1000));
+  res.setHeader('Set-Cookie', cookieHeader(signSession(email, SESSION_TTL), secure, SESSION_TTL / 1000));
   res.redirect('/');
 });
 

@@ -1,0 +1,25 @@
+app = "honoteca"
+primary_region = "dfw"
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8849"
+  DATA_DIR = "/data"
+  TRUST_PROXY = "1"
+
+[[mounts]]
+  source = "honoteca_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8849
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

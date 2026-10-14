@@ -10,19 +10,26 @@ const FALLBACK = randomBytes(32).toString('hex');
 const secret = () => process.env.AUTH_SECRET || FALLBACK;
 const sign = (exp) => createHmac('sha256', secret()).update(String(exp)).digest('base64url');
 
-// sesión = "<expiraEnMs>.<hmac>". Sin estado: se valida con la firma, sin tocar la DB.
-export function signSession(ttlMs) {
+// sesión = "<emailBase64url>.<expiraEnMs>.<hmac>". Sin estado: se valida con la firma, sin tocar la DB.
+export function signSession( ttlMs, email = 'owner') {
+  // Soporta signSession(ttlMs) o signSession(email, ttlMs)
+  if (typeof ttlMs === 'string') [email, ttlMs] = [ttlMs, email];
   const exp = Date.now() + ttlMs;
-  return `${exp}.${sign(exp)}`;
+  const payload = `${Buffer.from(String(email).trim().toLowerCase()).toString('base64url')}.${exp}`;
+  return `${payload}.${sign(payload)}`;
 }
 
+// Devuelve el email (string) si la cookie es válida y vigente, o null si no.
 export function verifySession(value) {
-  if (!value) return false;
-  const [exp, sig] = String(value).split('.');
-  if (!exp || !sig || Number(exp) < Date.now()) return false;
-  const want = sign(exp);
+  if (!value) return null;
+  const parts = String(value).split('.');
+  if (parts.length !== 3) return null;
+  const [b64, exp, sig] = parts;
+  if (!b64 || !exp || !sig || Number(exp) < Date.now()) return null;
+  const want = sign(`${b64}.${exp}`);
   const a = Buffer.from(sig), b = Buffer.from(want);
-  return a.length === b.length && timingSafeEqual(a, b);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  return Buffer.from(b64, 'base64url').toString('utf8') || null;
 }
 
 // token del enlace: aleatorio; en la DB se guarda solo su hash (nunca el token en claro).

@@ -11,7 +11,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const DB_PATH = process.env.BIBLIOTECA_DB || join(root, 'state', 'library.db');
+const DB_PATH = process.env.BIBLIOTECA_DB
+  || (process.env.DATA_DIR ? join(process.env.DATA_DIR, 'library.db') : join(root, 'state', 'library.db'));
 
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
@@ -21,6 +22,7 @@ db.exec('PRAGMA foreign_keys = ON');
 db.exec(`
   CREATE TABLE IF NOT EXISTS books (
     id            TEXT PRIMARY KEY,
+    owner         TEXT NOT NULL DEFAULT '', -- correo del dueño ('' en modo local sin login)
     isbn          TEXT,              -- NO único: un mismo ISBN puede tener varios renglones (un renglón = un ejemplar)
     title_native  TEXT,
     title_romaji  TEXT,
@@ -52,6 +54,7 @@ db.exec(`
   -- magic link: un renglón por enlace pendiente (se guarda el HASH, nunca el token en claro)
   CREATE TABLE IF NOT EXISTS login_tokens (
     token_hash TEXT PRIMARY KEY,
+    email      TEXT NOT NULL DEFAULT '',
     expires_at INTEGER NOT NULL,
     used       INTEGER DEFAULT 0
   );
@@ -62,6 +65,14 @@ try { db.exec('ALTER TABLE books ADD COLUMN description TEXT'); } catch { /* ya 
 // section (owned|buy): bibliotecas viejas quedan en 'owned'
 try { db.exec("ALTER TABLE books ADD COLUMN section TEXT NOT NULL DEFAULT 'owned'"); } catch { /* ya existe */ }
 try { db.exec('ALTER TABLE books ADD COLUMN publisher TEXT'); } catch { /* ya existe */ }
+try { db.exec("ALTER TABLE books ADD COLUMN owner TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_books_owner ON books(owner)'); } catch { /* ya existe */ }
+try { db.exec("ALTER TABLE login_tokens ADD COLUMN email TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+
+// Libros creados en local (owner='') pasan al primer correo de la whitelist al activar login
+export function claimUnownedBooks(owner) {
+  if (owner) db.prepare("UPDATE books SET owner=? WHERE owner=''").run(String(owner).trim().toLowerCase());
+}
 
 // ---- resolución de la cara mostrada -------------------------------------------------
 // DERIVADO de (cover_front, cover_url). Guardarraíl: NUNCA lo escribe el cliente.
@@ -136,88 +147,88 @@ function toColumns(book) {
   return cols;
 }
 
-// pos ordinal auto-propuesta: último pos de (shelf,row) + 1
-function nextPos(shelf, row) {
+// pos ordinal auto-propuesta: último pos de (shelf,row) + 1 dentro del estante de ese usuario
+function nextPos(owner, shelf, row) {
   const r = db.prepare(
-    'SELECT MAX(location_pos) AS m FROM books WHERE location_shelf=? AND location_row=?'
-  ).get(shelf, row);
+    'SELECT MAX(location_pos) AS m FROM books WHERE owner=? AND location_shelf=? AND location_row=?'
+  ).get(owner, shelf, row);
   return (r?.m ?? 0) + 1;
 }
 
-export function add_book(book) {
+export function add_book(book, owner = '') {
   const cols = toColumns(book);
+  cols.owner = owner;
   if (!cols.id) cols.id = crypto.randomUUID();
   // auto-posición ordinal si viene location sin pos
   if (cols.location_shelf != null && cols.location_row != null && cols.location_pos == null) {
-    cols.location_pos = nextPos(cols.location_shelf, cols.location_row);
+    cols.location_pos = nextPos(owner, cols.location_shelf, cols.location_row);
   }
   cols.cover_shown = resolveCover(cols); // DERIVADO — único escritor
   const names = Object.keys(cols);
   const sql = `INSERT INTO books (${names.join(',')}) VALUES (${names.map(() => '?').join(',')})`;
   db.prepare(sql).run(...names.map((n) => cols[n]));
-  return get_book(cols.id);
+  return get_book(cols.id, owner);
 }
 
 const now = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
 
-// lectura con `copies` DERIVADO (COUNT(*) de renglones con este ISBN) — no hay columna,
-// así que un PATCH no puede desincronizarlo: no existe.
+// lectura con `copies` DERIVADO (COUNT(*) de renglones de ESTE usuario con este ISBN) — no hay
+// columna, así que un PATCH no puede desincronizarlo: no existe.
 const SELECT_BOOK =
-  'SELECT b.*, (SELECT COUNT(*) FROM books c WHERE c.isbn=b.isbn AND b.isbn IS NOT NULL) AS copies FROM books b';
+  'SELECT b.*, (SELECT COUNT(*) FROM books c WHERE c.isbn=b.isbn AND c.owner=b.owner AND b.isbn IS NOT NULL) AS copies FROM books b';
 
 function recomputeCoverShown(id) {
   const r = db.prepare('SELECT cover_front, cover_url FROM books WHERE id=?').get(id);
   if (r) db.prepare('UPDATE books SET cover_shown=? WHERE id=?').run(resolveCover(r), id);
 }
 
-export function get_book(id) {
-  return rowToBook(db.prepare(`${SELECT_BOOK} WHERE b.id=?`).get(id));
+export function get_book(id, owner = '') {
+  return rowToBook(db.prepare(`${SELECT_BOOK} WHERE b.id=? AND b.owner=?`).get(id, owner));
 }
 
-export function list_books(filter = {}) {
+export function list_books(filter = {}, owner = '') {
   let sql = SELECT_BOOK;
-  const where = [];
-  const args = [];
+  const where = ['b.owner=?'];
+  const args = [owner];
   if (filter.cover_shown) { where.push('b.cover_shown=?'); args.push(filter.cover_shown); }
   if (filter.isbn) { where.push('b.isbn=?'); args.push(cleanIsbn(filter.isbn)); }
   if (filter.shelf) { where.push('b.location_shelf=?'); args.push(filter.shelf); }
   if (filter.section) { where.push('b.section=?'); args.push(filter.section); }
-  if (where.length) sql += ' WHERE ' + where.join(' AND ');
+  sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY b.location_shelf, b.location_row, b.location_pos, b.created_at';
   return db.prepare(sql).all(...args).map(rowToBook);
 }
 
-export function update_book(id, patch) {
+export function update_book(id, patch, owner = '') {
   const cols = toColumns(patch);
+  // recalcula cover_shown desde el estado resultante (nunca desde el cliente)
+  const current = db.prepare('SELECT * FROM books WHERE id=? AND owner=?').get(id, owner);
+  if (!current) return null;
   // auto-posición si cambia la ubicación y no trae pos
   if (cols.location_shelf != null && cols.location_row != null && cols.location_pos == null) {
-    cols.location_pos = nextPos(cols.location_shelf, cols.location_row);
+    cols.location_pos = nextPos(owner, cols.location_shelf, cols.location_row);
   }
-  // recalcula cover_shown desde el estado resultante (nunca desde el cliente)
-  const current = db.prepare('SELECT * FROM books WHERE id=?').get(id);
-  if (!current) return null;
   const merged = { cover_front: current.cover_front, cover_url: current.cover_url, ...cols };
   cols.cover_shown = resolveCover(merged);
   cols.updated_at = now();
   const names = Object.keys(cols);
-  const sql = `UPDATE books SET ${names.map((n) => `${n}=?`).join(',')} WHERE id=?`;
-  db.prepare(sql).run(...names.map((n) => cols[n]), id);
-  return get_book(id);
+  const sql = `UPDATE books SET ${names.map((n) => `${n}=?`).join(',')} WHERE id=? AND owner=?`;
+  db.prepare(sql).run(...names.map((n) => cols[n]), id, owner);
+  return get_book(id, owner);
 }
 
 // §4 — frontera de campos: lo que depende de la EDICIÓN (título, autores, páginas,
-// portada, lomo, needs_review) se escribe sobre TODOS los renglones de ese ISBN. Si no,
-// tus tres 雪国 podrían acabar con 610 y 612 páginas y el lomo saldría de dos anchos.
+// portada, lomo, needs_review) se escribe sobre TODOS los renglones de ese ISBN de ese usuario.
 // Per-ejemplar (NO aquí): location, scan_back, source, confidence.
 // Se EXPORTA: api.js usa la misma lista para partir los campos (una sola fuente de verdad).
 export const TITLE_FIELDS = [
   'title_native', 'title_romaji', 'authors', 'pages', 'publisher',
   'cover_url', 'cover_front', 'strip_color', 'strip_present', 'mirrored', 'needs_review', 'description',
 ];
-export function update_title(isbn, patch) {
+export function update_title(isbn, patch, owner = '') {
   if (!isbn) throw new Error('update_title requiere isbn');
   isbn = cleanIsbn(isbn);
-  const rows = db.prepare('SELECT id FROM books WHERE isbn=?').all(isbn);
+  const rows = db.prepare('SELECT id FROM books WHERE isbn=? AND owner=?').all(isbn, owner);
   if (!rows.length) return [];
   const cols = {};
   for (const f of TITLE_FIELDS) if (f in patch) cols[f] = patch[f];
@@ -227,25 +238,25 @@ export function update_title(isbn, patch) {
   }
   const names = Object.keys(cols);
   if (names.length) {
-    db.prepare(`UPDATE books SET ${names.map((n) => `${n}=?`).join(',')}, updated_at=? WHERE isbn=?`)
-      .run(...names.map((n) => cols[n]), now(), isbn);
+    db.prepare(`UPDATE books SET ${names.map((n) => `${n}=?`).join(',')}, updated_at=? WHERE isbn=? AND owner=?`)
+      .run(...names.map((n) => cols[n]), now(), isbn, owner);
   }
   for (const { id } of rows) recomputeCoverShown(id); // derivado, por renglón
-  return find_by_isbn(isbn);
+  return find_by_isbn(isbn, undefined, owner);
 }
 
 // needs_review SOLO sube (§5.4): true si el estado es C O si el renglón queda sin título.
 // La deuda es del RESULTADO, no de la intención. Nunca escribe false — por eso no está en
 // FIELDS: un patch genérico (ni el cliente) puede borrar la marca por accidente.
-export function escalateNeedsReview(isbn, id) {
-  if (isbn) update_title(isbn, { needs_review: true });
-  else if (id) db.prepare('UPDATE books SET needs_review=1, updated_at=? WHERE id=?').run(now(), id);
+export function escalateNeedsReview(isbn, id, owner = '') {
+  if (isbn) update_title(isbn, { needs_review: true }, owner);
+  else if (id) db.prepare('UPDATE books SET needs_review=1, updated_at=? WHERE id=? AND owner=?').run(now(), id, owner);
 }
 
 // Bajada deliberada («ya revisado»), title-level: el cliente pide la ACCIÓN, no el valor.
-export function clearNeedsReview(isbn, id) {
-  if (isbn) update_title(isbn, { needs_review: false });
-  else if (id) db.prepare('UPDATE books SET needs_review=0, updated_at=? WHERE id=?').run(now(), id);
+export function clearNeedsReview(isbn, id, owner = '') {
+  if (isbn) update_title(isbn, { needs_review: false }, owner);
+  else if (id) db.prepare('UPDATE books SET needs_review=0, updated_at=? WHERE id=? AND owner=?').run(now(), id, owner);
 }
 
 // Una transacción: o se aplican TODAS las escrituras, o ninguna. Para guardar un libro
@@ -256,33 +267,37 @@ export function tx(fn) {
   catch (e) { try { db.exec('ROLLBACK'); } catch { /* ya abortada */ } throw e; }
 }
 
-// TODOS los renglones de un ISBN (estado D: 2, 3, N ejemplares del mismo título — cada
-// renglón es un ejemplar físico con su propia location; el ×N se deriva de cuántos son).
+// TODOS los renglones de un ISBN de este usuario (estado D: 2, 3, N ejemplares del mismo título).
 // `section` opcional: en el estante de compras, un ejemplar que ya tienes NO debe contarse
 // como "ya lo tienes" — las secciones son listas independientes.
-export function find_by_isbn(isbn, section) {
-  const args = [cleanIsbn(isbn)];
+export function find_by_isbn(isbn, section, owner = '') {
+  const args = [cleanIsbn(isbn), owner];
   let extra = '';
   if (section) { extra = ' AND b.section=?'; args.push(section); }
-  return db.prepare(`${SELECT_BOOK} WHERE b.isbn=?${extra} ORDER BY b.created_at`).all(...args).map(rowToBook);
+  return db.prepare(`${SELECT_BOOK} WHERE b.isbn=? AND b.owner=?${extra} ORDER BY b.created_at`).all(...args).map(rowToBook);
 }
 
-// Un renglón = un ejemplar físico. La limpieza de archivos (portada/foto) la decide api.js
-// (depende de si era la última copia del ISBN, y ahí sí ve el contexto completo).
-export function remove_book(id) {
-  return db.prepare('DELETE FROM books WHERE id=?').run(id).changes > 0;
+// Un renglón = un ejemplar físico. La limpieza de archivos (portada/foto) la decide api.js.
+export function remove_book(id, owner = '') {
+  return db.prepare('DELETE FROM books WHERE id=? AND owner=?').run(id, owner).changes > 0;
+}
+
+// ¿Algún libro (de cualquier usuario) sigue usando este archivo de portada?
+export function coverStillUsed(coverFront) {
+  if (!coverFront) return false;
+  return Boolean(db.prepare('SELECT 1 FROM books WHERE cover_front=? LIMIT 1').get(coverFront));
 }
 
 // --- magic link (login por correo) ----------------------------------------------------
-export function createLoginToken(hash, expiresAt) {
-  db.prepare('INSERT INTO login_tokens (token_hash, expires_at) VALUES (?,?)').run(hash, expiresAt);
+export function createLoginToken(hash, expiresAt, email = '') {
+  db.prepare('INSERT INTO login_tokens (token_hash, email, expires_at) VALUES (?,?,?)').run(hash, email, expiresAt);
 }
-// válido una sola vez y sin caducar; lo marca usado al consumirlo
+// válido una sola vez y sin caducar; lo marca usado y devuelve el email (o true si vacío; false si inválido)
 export function consumeLoginToken(hash) {
-  const r = db.prepare('SELECT expires_at, used FROM login_tokens WHERE token_hash=?').get(hash);
+  const r = db.prepare('SELECT email, expires_at, used FROM login_tokens WHERE token_hash=?').get(hash);
   if (!r || r.used || r.expires_at < Date.now()) return false;
   db.prepare('UPDATE login_tokens SET used=1 WHERE token_hash=?').run(hash);
-  return true;
+  return r.email || true;
 }
 export function purgeLoginTokens() {
   db.prepare('DELETE FROM login_tokens WHERE expires_at < ?').run(Date.now());

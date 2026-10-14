@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-export const COVERS = join(root, 'covers');
+export const COVERS = process.env.DATA_DIR ? join(process.env.DATA_DIR, 'covers') : join(root, 'covers');
 export const TMP = join(COVERS, 'tmp');
 
 mkdirSync(TMP, { recursive: true });

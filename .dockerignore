@@ -1,0 +1,7 @@
+node_modules
+dist
+state
+covers
+.git
+.env
+.playwright-mcp

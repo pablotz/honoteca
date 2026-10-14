@@ -38,3 +38,20 @@ test('tx: si algo falla, no se escribe nada', () => {
   }));
   assert.equal(db.list_books().length, before);
 });
+
+test('aislamiento por usuario: cada correo ve y modifica solo su biblioteca', () => {
+  const a = db.add_book({ isbn: '9788437604947', title_native: 'Cien años', location: { shelf: 'A', row: 1 } }, 'ana@test.com');
+  const b = db.add_book({ isbn: '9788437604947', title_native: 'Cien años (Luis)', location: { shelf: 'A', row: 1 } }, 'luis@test.com');
+
+  assert.equal(a.location.pos, 1);
+  assert.equal(b.location.pos, 1); // el estante de Luis empieza en 1, independiente del de Ana
+  assert.equal(a.copies, 1);       // copies cuenta solo los ejemplares de Ana, no los de Luis
+  assert.equal(db.list_books({}, 'ana@test.com').length, 1);
+  assert.equal(db.list_books({}, 'luis@test.com').length, 1);
+  assert.equal(db.get_book(a.id, 'luis@test.com'), null);       // Luis no puede leer el libro de Ana
+  assert.equal(db.update_book(a.id, { pages: 99 }, 'luis@test.com'), null); // ni editarlo
+  assert.equal(db.remove_book(a.id, 'luis@test.com'), false);   // ni borrarlo
+
+  db.update_title('9788437604947', { title_native: 'Editado por Ana' }, 'ana@test.com');
+  assert.equal(db.get_book(b.id, 'luis@test.com').title_native, 'Cien años (Luis)'); // intacto
+});

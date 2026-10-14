@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { renameSync, existsSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, resolve, sep } from 'node:path';
-import { add_book, get_book, list_books, update_book, update_title, find_by_isbn, escalateNeedsReview, clearNeedsReview, remove_book, tx, cleanIsbn, TITLE_FIELDS as DB_TITLE_FIELDS } from './db.js';
+import { add_book, get_book, list_books, update_book, update_title, find_by_isbn, escalateNeedsReview, clearNeedsReview, remove_book, coverStillUsed, tx, cleanIsbn, TITLE_FIELDS as DB_TITLE_FIELDS } from './db.js';
 import { uploadPhoto, COVERS, TMP } from './upload.js';
 import { lookup_isbn, cover_by_title, search_by_title, gbDescription, esWikiIntro } from './meta.js';
 
@@ -109,7 +109,7 @@ api.get('/books', (req, res) => {
   if (req.query.isbn) filter.isbn = req.query.isbn;
   if (req.query.shelf) filter.shelf = req.query.shelf;
   if (req.query.section) filter.section = req.query.section;
-  res.json(list_books(filter));
+  res.json(list_books(filter, req.user));
 });
 
 // buscar por TÍTULO (sin ISBN): texto → hit de Open Library (título, autor, portada, sinopsis)
@@ -130,19 +130,19 @@ api.get('/search', async (req, res) => {
 });
 
 api.get('/books/:id', (req, res) => {
-  const b = get_book(req.params.id);
+  const b = get_book(req.params.id, req.user);
   if (!b) return res.status(404).json({ error: 'no existe' });
   res.json(b);
 });
 
 api.patch('/books/:id', (req, res) => {
-  const b = update_book(req.params.id, req.body || {});
+  const b = update_book(req.params.id, req.body || {}, req.user);
   if (!b) return res.status(404).json({ error: 'no existe' });
   res.json(b);
 });
 
-// Borrado: un renglón = un ejemplar. La portada (cover_front) es de la EDICIÓN: solo se
-// borra su fichero si esta era la última copia del ISBN; la foto del lomo es per-ejemplar.
+// Borrado: un renglón = un ejemplar. La portada (cover_front) solo se borra del disco si
+// ningún otro renglón (de este u otro usuario) sigue apuntando a ella; la foto del lomo es per-ejemplar.
 // `rmFile` acepta solo rutas RELATIVAS dentro de covers/ (nunca sale de ahí).
 const rmFile = (rel) => {
   if (!rel || !rel.startsWith('covers/')) return; // hotlink (cover_url) → no es fichero local
@@ -150,12 +150,11 @@ const rmFile = (rel) => {
   try { if (p && existsSync(p)) unlinkSync(p); } catch { /* ignorar */ }
 };
 api.delete('/books/:id', (req, res) => {
-  const b = get_book(req.params.id);
+  const b = get_book(req.params.id, req.user);
   if (!b) return res.status(404).json({ error: 'no existe' });
-  const lastCopy = !b.isbn || find_by_isbn(b.isbn).length <= 1;
+  remove_book(b.id, req.user);
   rmFile(b.scan_back);     // foto del código de este ejemplar
-  if (lastCopy) rmFile(b.cover_front); // portada de la edición, solo si se va la última copia
-  remove_book(b.id);
+  if (!coverStillUsed(b.cover_front)) rmFile(b.cover_front);
   res.json({ ok: true });
 });
 
@@ -171,7 +170,7 @@ api.post('/scan', uploadPhoto, (req, res) => {
   res.json({
     ticket: req.file.filename,                 // foto pendiente en covers/tmp/<ticket>
     isbn,
-    existing: isbn ? find_by_isbn(isbn, body.section) : [],  // solo la sección activa (D elige con hueco)
+    existing: isbn ? find_by_isbn(isbn, body.section, req.user) : [],  // solo la sección activa de este usuario
     strip: {                                   // §5.2, ya calculado en canvas del navegador
       color: body.strip_color || null,
       present: body.strip_present === '1' || body.strip_present === 'true',
@@ -182,7 +181,7 @@ api.post('/scan', uploadPhoto, (req, res) => {
 
 // lookup read-only (estado D sin escribir): qué filas hay ya de este ISBN en esta sección
 api.get('/lookup/:isbn', (req, res) => {
-  res.json({ isbn: req.params.isbn, existing: find_by_isbn(req.params.isbn, req.query.section) });
+  res.json({ isbn: req.params.isbn, existing: find_by_isbn(req.params.isbn, req.query.section, req.user) });
 });
 
 // Portada LOCAL si la fuente no trae hotlink: EXACTO por ISBN primero (OL y El Sótano),
@@ -201,14 +200,14 @@ async function coverForHit(hit, isbn) {
 // las copias del ISBN (cover_front es de la edición → update_title).
 api.post('/books/:id/cover', async (req, res) => {
   try {
-    const b = get_book(req.params.id);
+    const b = get_book(req.params.id, req.user);
     if (!b) return res.status(404).json({ error: 'no existe' });
     if (!b.isbn) return res.status(400).json({ error: 'sin ISBN no hay portada que buscar' });
     const { hit } = await lookup_isbn(b.isbn);
     const cover = await coverForHit(hit, b.isbn);
-    if (cover) update_title(b.isbn, { cover_front: cover });
-    else if (hit && hit.cover_url) update_title(b.isbn, { cover_url: hit.cover_url });
-    res.json({ ok: true, cover, book: get_book(b.id) });
+    if (cover) update_title(b.isbn, { cover_front: cover }, req.user);
+    else if (hit && hit.cover_url) update_title(b.isbn, { cover_url: hit.cover_url }, req.user);
+    res.json({ ok: true, cover, book: get_book(b.id, req.user) });
   } catch (e) {
     res.status(502).json({ error: String(e.message || e) });
   }
@@ -284,11 +283,11 @@ function attachBackPhoto(ticket, id) {
   if (!src || !existsSync(src)) return null; // ticket expirado/purgado: degrada sin romper
   return promote(src, 'back', id);
 }
-// patch de TÍTULO → a TODOS los renglones del ISBN; sin ISBN (C manual) → solo esa fila
-function applyTitle(isbn, id, patch) {
+// patch de TÍTULO → a TODOS los renglones del ISBN de ese usuario; sin ISBN (C manual) → solo esa fila
+function applyTitle(isbn, id, patch, owner) {
   if (!Object.keys(patch).length) return;
-  if (isbn) update_title(isbn, patch);
-  else if (id) update_book(id, patch);
+  if (isbn) update_title(isbn, patch, owner);
+  else if (id) update_book(id, patch, owner);
 }
 
 api.post('/confirm', (req, res) => {
@@ -302,13 +301,13 @@ api.post('/confirm', (req, res) => {
 
     if (action === 'update') {
       if (!id) return res.status(400).json({ error: 'update requiere id' });
-      const cur = get_book(id);
+      const cur = get_book(id, req.user);
       if (!cur) return res.status(404).json({ error: 'no existe' });
       const back = attachBackPhoto(ticket, id);
       if (back) perCopy.scan_back = back;            // scan_back per-ejemplar
-      if (Object.keys(perCopy).length) update_book(id, perCopy);
-      applyTitle(cur.isbn, id, titlePatch);
-      return res.json(finalize(id, state));
+      if (Object.keys(perCopy).length) update_book(id, perCopy, req.user);
+      applyTitle(cur.isbn, id, titlePatch, req.user);
+      return res.json(finalize(id, state, req.user));
     }
 
     // create → fila nueva (C sin match; D = otro ejemplar del mismo ISBN, su ordinal propio)
@@ -318,13 +317,13 @@ api.post('/confirm', (req, res) => {
     if (state === 'D') createFields.location = null;
     // una transacción: o queda el renglón con su foto y su título, o no queda nada
     const created = tx(() => {
-      const c = add_book(createFields);
+      const c = add_book(createFields, req.user);
       const back = attachBackPhoto(ticket, c.id);
-      if (back) update_book(c.id, { scan_back: back });
-      applyTitle(c.isbn, c.id, titlePatch);
+      if (back) update_book(c.id, { scan_back: back }, req.user);
+      applyTitle(c.isbn, c.id, titlePatch, req.user);
       return c;
     });
-    res.status(201).json(finalize(created.id, state));
+    res.status(201).json(finalize(created.id, state, req.user));
   } catch (e) {
     res.status(400).json({ error: String(e.message || e) });
   }
@@ -333,32 +332,32 @@ api.post('/confirm', (req, res) => {
 // needs_review SOLO SUBE (§5.4). Escala si: el estado es C, el renglón queda sin título,
 // o un HERMANO del mismo ISBN ya está marcado (la marca es title-level: un D create no
 // puede nacer limpio al lado de un renglón marcado). Nunca escribe false desde acá.
-function finalize(id, state) {
-  const b = get_book(id);
+function finalize(id, state, owner) {
+  const b = get_book(id, owner);
   const noTitle = !b.title_native && !b.title_romaji;
-  const siblingMarked = b.isbn ? find_by_isbn(b.isbn).some((r) => r.needs_review) : false;
-  if (state === 'C' || noTitle || siblingMarked) escalateNeedsReview(b.isbn, id);
-  return get_book(id);
+  const siblingMarked = b.isbn ? find_by_isbn(b.isbn, undefined, owner).some((r) => r.needs_review) : false;
+  if (state === 'C' || noTitle || siblingMarked) escalateNeedsReview(b.isbn, id, owner);
+  return get_book(id, owner);
 }
 
 // Bajada deliberada de needs_review («ya revisado»): el cliente pide la ACCIÓN, no el valor.
 api.post('/books/:id/review', (req, res) => {
-  const b = get_book(req.params.id);
+  const b = get_book(req.params.id, req.user);
   if (!b) return res.status(404).json({ error: 'no existe' });
-  clearNeedsReview(b.isbn, b.id);
-  res.json(get_book(req.params.id));
+  clearNeedsReview(b.isbn, b.id, req.user);
+  res.json(get_book(req.params.id, req.user));
 });
 
 // cover_front: portada subida o pegada manualmente (la hoja «＋ portada» del tile).
-// cover_front es de EDICIÓN → propaga a todos los renglones del ISBN (update_title).
+// cover_front es de EDICIÓN → propaga a todos los renglones del ISBN de este usuario (update_title).
 api.post('/covers/front/:id', uploadPhoto, (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'falta la foto' });
   try {
-    const cur = get_book(req.params.id);
+    const cur = get_book(req.params.id, req.user);
     if (!cur) return res.status(404).json({ error: 'no existe' });
     const rel = promote(req.file.path, 'front', req.params.id);
-    applyTitle(cur.isbn, req.params.id, { cover_front: rel });
-    res.json(get_book(req.params.id));
+    applyTitle(cur.isbn, req.params.id, { cover_front: rel }, req.user);
+    res.json(get_book(req.params.id, req.user));
   } catch (e) {
     res.status(400).json({ error: String(e.message || e) });
   }

@@ -48,9 +48,13 @@ export default function App() {
   const toastTimer = useRef(null);
   const toastKey = useRef(0);
   const [fly, setFly] = useState(null);          // clon del libro volando de la balda al panel
-  const [auth, setAuth] = useState(null);        // null = comprobando; luego { authed, required, mail }
+  const [auth, setAuth] = useState(null);        // null = comprobando; luego { authed, user, required, mail }
   useEffect(() => { authMe().then(setAuth); }, []);
-  const doLogout = async () => { await logout(); setAuth((a) => ({ ...a, authed: false })); };
+  const doLogout = async () => {
+    await logout();
+    setBooks([]); setDetail(null); setConfirmState(null); setSessionBoth(null);
+    setAuth((a) => ({ ...a, authed: false, user: null }));
+  };
   const [panelShow, setPanelShow] = useState(false); // el panel se revela al llegar el libro
 
   const showToast = (kind, title, note = '') => {
@@ -339,6 +343,7 @@ export default function App() {
         perRow={perRow} maxPerRow={maxPerRow} onPerRow={(v) => vtx(() => setPerRow(v))}
         onAdd={openNew}
         onLogout={auth.required ? doLogout : null}
+        user={auth.user}
       />
 
       <main>
@@ -349,13 +354,16 @@ export default function App() {
             ? <div className="scanwrap"><SearchLoader label={busy.text} /></div>
             : <div className="spin">{busy.text}</div>)
           : confirmState && !modal ? <ConfirmPanel {...confirmProps} modal={false} onBack={() => vtx(goLibrary)} />
-          : detail ? (
+          : (
+            // La columna de la ficha está SIEMPRE reservada: el mueble no se recoloca al abrir
+            // un libro. Si se movía, la sombra del estante viajaba en la transición y parpadeaba.
             <div className="split">
               <div className="split-shelf">{libraryView}</div>
-              <BookDetail book={detail} visible={panelShow} onBack={() => vtx(goLibrary)} onAddCover={addCoverTo} onDelete={setDeleteTarget} onMove={moveSection} onRetryCover={retryCover} />
+              {detail
+                ? <BookDetail book={detail} visible={panelShow} onBack={() => vtx(goLibrary)} onAddCover={addCoverTo} onDelete={setDeleteTarget} onMove={moveSection} onRetryCover={retryCover} />
+                : <aside className="detail-panel" aria-hidden="true" />}
             </div>
-          )
-          : libraryView}
+          )}
       </main>
 
       <div className="room-floor" aria-hidden="true" />

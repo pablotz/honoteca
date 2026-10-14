@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import {
   WebGLRenderer, Scene, PerspectiveCamera, Group, Mesh, BoxGeometry,
   MeshBasicMaterial, MeshStandardMaterial, AmbientLight, DirectionalLight,
@@ -84,7 +84,10 @@ export default function Cover3D({ book, style }) {
   const hasCover = !!(book.cover_front || book.cover_url);
   const src = book.cover_front ? `/${book.cover_front}` : book.cover_url || null;
 
-  useEffect(() => {
+  // useLayoutEffect (no useEffect): el primer fotograma debe estar PINTADO antes de que el
+  // navegador capture la transición de vista — si no, la ficha captura un canvas vacío y el
+  // libro vuela hacia la nada y luego aparece de golpe.
+  useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host || host.clientWidth === 0 || host.clientHeight === 0) return;
     setFailed(false);
@@ -116,7 +119,9 @@ export default function Cover3D({ book, style }) {
     const front = new MeshBasicMaterial({ color: strip });
     const back = new MeshBasicMaterial({ color: '#241708' }); // se pinta con la sinopsis abajo
     const pages = new MeshStandardMaterial({ color: '#efe8d6', roughness: 0.95 });
-    const spine = new MeshStandardMaterial({ color: strip, roughness: 0.55 });
+    // lomo SIN luces, como las tapas: así su color es EXACTAMENTE el de la contraportada
+    // (una cubierta que envuelve el lomo). Con material iluminado el tono cambiaba al girar.
+    const spine = new MeshBasicMaterial({ color: strip });
     const board = new MeshStandardMaterial({ color: '#3a2f24', roughness: 0.85 });
     const mesh = new Mesh(new BoxGeometry(2, 3, 0.22), [pages, spine, board, board, front, back]);
     const book3d = new Group();
@@ -129,7 +134,9 @@ export default function Cover3D({ book, style }) {
     const setTexture = (map) => {
       if (texture) texture.dispose();
       texture = map;
-      if (map) { map.colorSpace = SRGBColorSpace; map.anisotropy = 8; }
+      // needsUpdate: una Texture hecha a mano NO se sube a la GPU sin esto (CanvasTexture sí
+      // se marca sola) — sin ello la tapa se ve negra.
+      if (map) { map.colorSpace = SRGBColorSpace; map.anisotropy = 8; map.needsUpdate = true; }
       front.map = map;
       front.color.set('#ffffff');
       front.needsUpdate = true;
@@ -138,7 +145,10 @@ export default function Cover3D({ book, style }) {
       // UNA sola descarga: la misma imagen sirve de textura de la tapa y para muestrear el
       // color de la contraportada (antes se bajaba dos veces).
       const img = new Image();
-      img.crossOrigin = 'anonymous';
+      // crossOrigin SOLO para portadas remotas (hotlink): en las locales deja la petición igual
+      // que la del estante, para que el navegador reutilice la MISMA imagen ya decodificada
+      // (con crossOrigin la clave de caché cambia y la tapa se volvía a bajar → parpadeo).
+      if (!src.startsWith('/')) img.crossOrigin = 'anonymous';
       img.onload = () => {
         setTexture(new Texture(img));
         const base = averageColor(img);
@@ -157,6 +167,7 @@ export default function Cover3D({ book, style }) {
       const mk = (v) => Math.min(255, Math.round(v));
       const bg = base ? `rgb(${mk(base.r * 0.85 + 30)}, ${mk(base.g * 0.85 + 30)}, ${mk(base.b * 0.85 + 30)})` : 'rgb(70,52,34)';
       const ink = inkOverride || (lum > 150 ? '#241a10' : '#f4ead8');
+      spine.color.set(bg); // el lomo va del MISMO color que la contraportada
       if (backTex) backTex.dispose();
       backTex = new CanvasTexture(backCanvas(displayTitle(book), lines, bg, ink));
       backTex.colorSpace = SRGBColorSpace;
@@ -253,6 +264,8 @@ export default function Cover3D({ book, style }) {
       book3d.position.y = Math.sin(t / 1100) * 0.08; // flota
       renderer.render(scene, camera);
     };
+    book3d.rotation.y = BASE;               // fotograma 0 ya pintado (sin esperar al rAF)
+    renderer.render(scene, camera);
     raf = requestAnimationFrame(loop);
 
     const resize = () => {
