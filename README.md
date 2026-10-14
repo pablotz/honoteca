@@ -1,6 +1,22 @@
-# Honoteca
+<p align="center">
+  <img src="public/icon-512.png" alt="Honoteca app icon" width="96" height="96" />
+</p>
+
+<h1 align="center">Honoteca</h1>
 
 A physical book library and wishlist app that turns a quick phone photo of a book's barcode or cover into an interactive 3D wooden bookshelf. Built with React, Three.js, Express 5, and built-in Node SQLite.
+
+![Honoteca's wooden bookshelf with books arranged across shelves](docs/images/shelf.png)
+
+## Screenshots
+
+| Grid view | Book detail |
+| :---: | :---: |
+| ![Book covers in grid view](docs/images/grid.png) | ![Selected book with interactive 3D cover and synopsis action](docs/images/book-detail.png) |
+
+<p align="center">
+  <img src="docs/images/login.png" alt="Honoteca's email login screen on mobile" width="300" />
+</p>
 
 ## Features
 
