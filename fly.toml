@@ -8,6 +8,7 @@ primary_region = "dfw"
   PORT = "8849"
   DATA_DIR = "/data"
   TRUST_PROXY = "1"
+  APP_URL = "https://honoteca.app"
 
 [[mounts]]
   source = "honoteca_data"

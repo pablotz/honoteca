@@ -1,5 +1,6 @@
 import { t } from '../lib/i18n.js';
 import { useRef, useState } from 'react';
+import Icon from './Icon.jsx';
 
 // Carrusel horizontal de portadas por edición: tocar una miniatura cambia tanto la portada
 // como la editorial asociada. Descarta automáticamente portadas vacías (1x1 de Open Library).
@@ -21,8 +22,8 @@ export default function CoverCarousel({ editions = [], selectedUrl, onSelect, la
         <span className="c-carousel-lbl">{label} ({visible.length})</span>
         {visible.length > 3 && (
           <div className="c-carousel-nav">
-            <button type="button" className="c-nav-btn" onClick={() => scroll(-1)} aria-label={t("Anterior", "Previous")}>‹</button>
-            <button type="button" className="c-nav-btn" onClick={() => scroll(1)} aria-label={t("Siguiente", "Next")}>›</button>
+            <button type="button" className="c-nav-btn" onClick={() => scroll(-1)} aria-label={t("Anterior", "Previous")}><Icon name="left" /></button>
+            <button type="button" className="c-nav-btn" onClick={() => scroll(1)} aria-label={t("Siguiente", "Next")}><Icon name="right" /></button>
           </div>
         )}
       </div>

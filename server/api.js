@@ -6,6 +6,8 @@ import { join, resolve, sep } from 'node:path';
 import { add_book, get_book, list_books, update_book, update_title, find_by_isbn, escalateNeedsReview, clearNeedsReview, remove_book, coverStillUsed, tx, cleanIsbn, TITLE_FIELDS as DB_TITLE_FIELDS } from './db.js';
 import { uploadPhoto, COVERS, TMP } from './upload.js';
 import { lookup_isbn, cover_by_title, search_by_title, search_editions, resolveDescription, isEnglishText, isEnglishPublisher } from './meta.js';
+import { rateLimit } from './rateLimit.js';
+import { canAccessCover } from './coverAccess.js';
 
 const BACK = join(COVERS, 'back');
 const FRONT = join(COVERS, 'front');
@@ -102,6 +104,24 @@ async function elSotanoCover(isbn) {
 }
 
 export const api = Router();
+api.use((req, res, next) => {
+  // A client cannot attach another reader's photo to their own book to bypass access checks.
+  for (const book of [req.body, req.body?.book]) {
+    if (!book || typeof book !== 'object') continue;
+    for (const field of ['cover_front', 'scan_back']) {
+      if (book[field] && !canAccessCover(book[field], req.user)) return res.status(400).json({ error: 'Invalid photo reference.' });
+    }
+  }
+  if (req.method === 'PATCH' && req.body?.id) return res.status(400).json({ error: 'Book IDs cannot be changed.' });
+  if (req.body?.ticket && !canAccessCover(`covers/tmp/${req.body.ticket}`, req.user)) return res.status(400).json({ error: 'Invalid photo ticket.' });
+  next();
+});
+const externalLimited = rateLimit({ max: 20, windowMs: 60_000 });
+api.use(['/search', '/meta/:isbn', '/books/:id/cover', '/books/:id/covers', '/books/:id/select-cover'], (req, res, next) => {
+  if (!externalLimited(req.user || req.ip || '?')) return next();
+  res.setHeader('Retry-After', '60');
+  res.status(429).json({ error: 'Too many catalog requests. Try again in a minute.' });
+});
 
 api.get('/books', (req, res) => {
   const filter = {};

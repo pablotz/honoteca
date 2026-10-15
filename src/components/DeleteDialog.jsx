@@ -1,6 +1,7 @@
 import { t } from '../lib/i18n.js';
 import { useEffect, useRef } from 'react';
 import { displayTitle } from '../lib/book.js';
+import Icon from './Icon.jsx';
 
 // Confirmación de borrado. `copies > 1` → dos acciones: quitar solo este ejemplar o
 // eliminar el título completo (todos sus renglones del ISBN).
@@ -25,11 +26,11 @@ export default function DeleteDialog({ book, onCancel, onRemoveOne, onRemoveAll 
         <div className="actions">
           {copies > 1 ? (
             <>
-              <button type="button" className="btn danger" onClick={onRemoveOne}>{t("Quitar solo este ejemplar", "Remove this copy")}</button>
-              <button type="button" className="btn ghost danger" onClick={onRemoveAll}>{t('Eliminar libro completo', 'Delete all copies')} ({copies})</button>
+              <button type="button" className="btn danger" onClick={onRemoveOne}><Icon name="trash" />{t("Quitar solo este ejemplar", "Remove this copy")}</button>
+              <button type="button" className="btn ghost danger" onClick={onRemoveAll}><Icon name="trash" />{t('Eliminar libro completo', 'Delete all copies')} ({copies})</button>
             </>
           ) : (
-            <button type="button" className="btn danger" onClick={onRemoveOne}>{t("Eliminar libro", "Delete book")}</button>
+            <button type="button" className="btn danger" onClick={onRemoveOne}><Icon name="trash" />{t("Eliminar libro", "Delete book")}</button>
           )}
           <button type="button" className="btn ghost" onClick={onCancel}>{t("Cancelar", "Cancel")}</button>
         </div>

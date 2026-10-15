@@ -1,6 +1,7 @@
 import { t } from '../lib/i18n.js';
 import { useEffect, useRef, useState } from 'react';
 import ScanFrame from './ScanFrame.jsx';
+import Icon from './Icon.jsx';
 
 // Diálogo «＋»: escanear o buscar directo (título/ISBN). El resultado de la búsqueda vive
 // EN el modal (sin página intermedia) — ver `showResult` + children (ConfirmPanel).
@@ -50,7 +51,7 @@ export default function AddDialog({ open, showResult, children, onDismiss, onSca
                   onChange={(e) => setQ(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
                 />
-                <button type="button" className="btn" onClick={submit}>{t("Buscar", "Search")}</button>
+                <button type="button" className="btn" onClick={submit}><Icon name="search" />{t("Buscar", "Search")}</button>
               </div>
               <p className="nd-hint">{t("Sirve el título del libro o un ISBN de 10/13 dígitos.", "Use a book title or a 10/13-digit ISBN.")}</p>
             </div>

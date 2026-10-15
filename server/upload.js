@@ -1,7 +1,9 @@
 // server/upload.js — subida de fotos. Multipart DIRECTO a disco (multer).
 // Ni base64 en el wire, ni BLOB en la DB: la foto es un archivo y la DB guarda la ruta.
 import multer from 'multer';
-import { mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { mkdirSync, readdirSync, statSync, unlinkSync, statfsSync } from 'node:fs';
+import { uploadPrefix } from './coverAccess.js';
+import { rateLimit } from './rateLimit.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,10 +19,10 @@ mkdirSync(TMP, { recursive: true });
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/heic': '.heic', 'image/heif': '.heif' };
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, TMP),
-  filename: (_req, file, cb) => cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${EXT[file.mimetype] || '.jpg'}`),
+  filename: (req, file, cb) => cb(null, `${uploadPrefix(req.user)}-${crypto.randomUUID()}${EXT[file.mimetype] || '.jpg'}`),
 });
 
-export const uploadPhoto = multer({
+const receivePhoto = multer({
   storage,
   limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB por foto
   fileFilter: (_req, file, cb) => {
@@ -28,6 +30,19 @@ export const uploadPhoto = multer({
     else cb(new Error('solo imágenes (jpeg/png/webp/heic)'));
   },
 }).single('photo');
+
+const uploadsLimited = rateLimit({ max: 5, windowMs: 60_000 });
+let activeUploads = 0;
+export function uploadPhoto(req, res, next) {
+  if (uploadsLimited(req.user || req.ip || '?') || activeUploads >= 2) {
+    res.setHeader('Retry-After', '60');
+    return res.status(429).json({ error: 'Too many uploads. Try again in a minute.' });
+  }
+  const disk = statfsSync(COVERS);
+  if (disk.bavail * disk.bsize < 128 * 1024 * 1024) return res.status(507).json({ error: 'Photo storage is full.' });
+  activeUploads++;
+  receivePhoto(req, res, (err) => { activeUploads--; next(err); });
+}
 
 // Purga de huérfanas: fotos en tmp/ sin confirmar con más de 24 h.
 export function purgeTmp(maxAgeMs = 24 * 60 * 60 * 1000) {

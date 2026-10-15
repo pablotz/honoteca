@@ -16,7 +16,7 @@ function Prop({ kind }) {
 // (vacías si no hay libros ahí), para que la biblioteca se vea como tal.
 // `buy`: el mueble de compras (la madera cambia para que se lea como OTRO estante).
 const SHELF_UNITS = [['A', 1], ['A', 2], ['B', 1], ['B', 2], ['C', 1], ['C', 2]];
-const DECOR = ['back-panel', 'plank-top', 'plank-front'];
+const DECOR = ['plank-top', 'plank-front'];
 
 // Reordena los libros del mueble: `perRow` libros por balda. Pedido estable (por ubicación),
 // los que no tienen ubicación van al final. Mínimo 6 baldas aunque haya pocos libros.
@@ -37,9 +37,9 @@ export default function ShelfView({ books, perRow, onOpen, onAddCover, buy = fal
   ordered.forEach((b, i) => groups.get(units[Math.min(Math.floor(i / perRow), rows - 1)]).push(b));
 
   return (
-    <div className={`shelfview${buy ? ' buy' : ''}`}>
+    <div className={`shelfview${buy ? ' buy' : ''}`} style={{ '--books-per-row': perRow }}>
       {units.map((u, ri) => (
-        <div className="shelfrow" key={u}>
+        <div className={`shelfrow${groups.get(u).length ? '' : ' is-empty'}`} key={u}>
           {DECOR.map((c) => <i key={c} className={c} />)}
           {groups.get(u).map((b) => b.id === holeId
             ? <div key={`hole-${b.id}`} className="tile slot" /> // el libro está "sacado" del estante

@@ -7,7 +7,6 @@ import { computeStrip } from './lib/strip.js';
 import { ocrTitleFrom } from './lib/ocr.js';
 import { validIsbn, displayTitle } from './lib/book.js';
 import { vtx } from './lib/vtx.js';
-import { useMediaQuery } from './lib/useMediaQuery.js';
 import Header from './components/Header.jsx';
 import ShelfView from './components/ShelfView.jsx';
 import GridView from './components/GridView.jsx';
@@ -18,23 +17,26 @@ import ConfirmPanel from './components/ConfirmPanel.jsx';
 import CropDialog from './components/CropDialog.jsx';
 import ScanFrame from './components/ScanFrame.jsx';
 import DeleteDialog from './components/DeleteDialog.jsx';
+import MoveDialog from './components/MoveDialog.jsx';
 import Burst3D from './components/Burst3D.jsx';
 import FlyingBook from './components/FlyingBook.jsx';
 import SearchLoader from './components/SearchLoader.jsx';
 import Login from './components/Login.jsx';
+import HomeScreenGuide from './components/HomeScreenGuide.jsx';
+import Icon from './components/Icon.jsx';
+import { THEMES, readPreferences, savePreferences, initialTheme } from './lib/preferences.js';
 
-const THEMES = ['dark', 'sepia', 'light'];
 const clampPerRow = (v, max) => Math.max(1, Math.min(Number(v) || 6, max));
 
 export default function App() {
-  const wide = useMediaQuery('(min-width:900px)');
-  const maxPerRow = wide ? 6 : 3;
+  const maxPerRow = 6;
 
-  const [theme, setTheme] = useState(() => localStorage.getItem('biblioteca-theme') || 'dark');
-  const [view, setView] = useState(() => localStorage.getItem('biblioteca-view') || 'shelf');
-  const [section, setSection] = useState(() => localStorage.getItem('biblioteca-section') || 'owned'); // owned | buy
+  const [theme, setTheme] = useState(initialTheme);
+  const [view, setView] = useState(() => readPreferences().view);
+  const [section, setSection] = useState(() => readPreferences().section); // owned | buy
   const sectionRef = useRef(section);
-  const [perRow, setPerRowState] = useState(() => clampPerRow(localStorage.getItem('biblioteca-perrow') || 6, wide ? 6 : 3));
+  const [preferredPerRow, setPerRowState] = useState(() => readPreferences().perRow);
+  const perRow = Math.max(3, clampPerRow(preferredPerRow, maxPerRow));
   const [books, setBooks] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -45,6 +47,7 @@ export default function App() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [crop, setCrop] = useState(null);       // { id, file }
   const [deleteTarget, setDeleteTarget] = useState(null); // libro a eliminar (ficha)
+  const [moveTarget, setMoveTarget] = useState(null); // { book, to }
   const [toast, setToast] = useState(null);     // { id, kind: 'add'|'remove', title, note? } | null
   const toastTimer = useRef(null);
   const toastKey = useRef(0);
@@ -58,7 +61,14 @@ export default function App() {
     if (logoutOpen && !dialog.open) dialog.showModal();
     if (!logoutOpen && dialog.open) dialog.close();
   }, [logoutOpen]);
-  useEffect(() => { authMe().then(setAuth); }, []);
+  useEffect(() => {
+    authMe().then((result) => {
+      const saved = readPreferences(result.user);
+      setTheme(saved.theme); setView(saved.view); setSection(saved.section); setPerRowState(saved.perRow);
+      sectionRef.current = saved.section;
+      setAuth(result);
+    });
+  }, []);
   const doLogout = async () => {
     setLogoutOpen(false);
     await logout();
@@ -86,21 +96,19 @@ export default function App() {
   // ---- tema / vista / balda (persistidos) ----
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('biblioteca-theme', theme);
   }, [theme]);
-  useEffect(() => { localStorage.setItem('biblioteca-view', view); }, [view]);
+  useEffect(() => {
+    if (auth?.authed) savePreferences(auth.user, { theme, view, section, perRow: preferredPerRow });
+  }, [auth?.authed, auth?.user, theme, view, section, preferredPerRow]);
   useEffect(() => { sectionRef.current = section; }, [section]);
   const changeSection = (s) => {
     if (s === section) { goLibrary(); return; }
     setSection(s);
-    localStorage.setItem('biblioteca-section', s);
     goLibrary(); // cada sección es su propio estante: se vuelve a la balda correspondiente
   };
-  useEffect(() => { setPerRowState((p) => clampPerRow(p, wide ? 6 : 3)); }, [wide]); // PC ↔ teléfono
   const cycleTheme = () => setTheme((t) => THEMES[(THEMES.indexOf(t) + 1) % THEMES.length]);
   const setPerRow = (v) => {
     const n = clampPerRow(v, maxPerRow);
-    localStorage.setItem('biblioteca-perrow', String(n));
     setPerRowState(n);
   };
   const reflowBooks = (update) => {
@@ -360,7 +368,7 @@ export default function App() {
 
   // Puerta de acceso: sin sesión (y con auth configurada) solo se ve la pantalla de entrada.
   if (auth === null) return null;
-  if (auth.required && !auth.authed) return <Login mail={auth.mail} />;
+  if (auth.required && !auth.authed) return <Login mail={auth.mail} turnstileSiteKey={auth.turnstileSiteKey} />;
 
   const confirmProps = {
     session, state: confirmState, entry, onEntry: setEntry,
@@ -400,7 +408,7 @@ export default function App() {
       />
 
       <main>
-        {section === 'buy' && <div className="shelf-cap">{t("Estante de compras: lo que escanees desde aquí cae en esta lista, sin preguntar.", "Wishlist: books scanned here are added to this list automatically.")}</div>}
+        <HomeScreenGuide />
         {mainBusy ? (busy.scan
           ? <div className="scanwrap"><ScanFrame label={busy.text} /></div>
           : busy.search
@@ -413,7 +421,7 @@ export default function App() {
             <div className="split">
               <div className="split-shelf">{libraryView}</div>
               {detail
-                ? <BookDetail key={detail.id} book={detail} visible={panelShow} onBack={closeDetail} onAddCover={addCoverTo} onDelete={setDeleteTarget} onMove={moveSection} onSelectCover={selectOnlineCover} onEditPublisher={editPublisher} />
+                ? <BookDetail key={detail.id} book={detail} visible={panelShow} onBack={closeDetail} onAddCover={addCoverTo} onDelete={setDeleteTarget} onMove={(book, to) => setMoveTarget({ book, to })} onSelectCover={selectOnlineCover} onEditPublisher={editPublisher} />
                 : <aside className="detail-panel" aria-hidden="true" />}
             </div>
           )}
@@ -424,7 +432,7 @@ export default function App() {
       {panelShow && <div className="panel-fade" onClick={closeDetail} aria-hidden="true" />}
       {fly && <FlyingBook key={fly.id} book={detail} fly={fly} onArrive={() => setPanelShow(true)} onDone={() => setFly(null)} />}
 
-      <button className="fab" aria-label={t("Escanear un libro", "Scan a book")} onClick={openNew}>＋</button>
+      <button className="fab" aria-label={t("Escanear un libro", "Scan a book")} onClick={openNew}><Icon name="plus" /></button>
 
       {toast && (
         <div className="toast" role="status">
@@ -469,6 +477,15 @@ export default function App() {
         />
       )}
 
+      {moveTarget && (
+        <MoveDialog
+          book={moveTarget.book}
+          to={moveTarget.to}
+          onCancel={() => setMoveTarget(null)}
+          onMove={() => { const target = moveTarget; setMoveTarget(null); moveSection(target.book, target.to); }}
+        />
+      )}
+
       <dialog ref={logoutRef} className="logout-dlg" aria-labelledby="logout-title" onClose={() => setLogoutOpen(false)} onClick={(e) => { if (e.target === e.currentTarget) setLogoutOpen(false); }}>
         <div className="nd">
           <h2 id="logout-title" className="nd-title">{t("Cerrar sesión", "Log out")}</h2>
@@ -477,7 +494,7 @@ export default function App() {
             {' '}{t('Tendrás que pedir un nuevo enlace para volver a entrar.', 'You’ll need a new login link to sign in again.')}
           </p>
           <div className="actions">
-            <button type="button" className="btn danger" onClick={doLogout}>{t("Sí, cerrar sesión", "Yes, log out")}</button>
+            <button type="button" className="btn danger" onClick={doLogout}><Icon name="logout" />{t("Sí, cerrar sesión", "Yes, log out")}</button>
             <button type="button" className="btn ghost" onClick={() => setLogoutOpen(false)} autoFocus>{t("Cancelar", "Cancel")}</button>
           </div>
         </div>

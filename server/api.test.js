@@ -12,6 +12,24 @@ const db = await import('./db.js');
 const handler = api.stack.find((s) => s.route?.path === '/books/:id/select-cover').route.stack[0].handle;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
+test('clients cannot attach another account photo or scan ticket or change a book ID', () => {
+  const guard = api.stack[0].handle;
+  db.add_book({ title_native: 'Private', cover_front: 'covers/front/alice.jpg' }, 'alice@example.com');
+  for (const body of [
+    { cover_front: 'covers/front/alice.jpg' },
+    { book: { cover_front: 'covers/front/alice.jpg' } },
+    { ticket: 'someone-elses-photo.jpg' },
+    { id: '9786073198288' },
+  ]) {
+    let status;
+    guard({ method: 'PATCH', user: 'bob@example.com', body }, { status(code) { status = code; return { json() {} }; } }, () => assert.fail('unauthorized reference accepted'));
+    assert.equal(status, 400);
+  }
+  let allowed = false;
+  guard({ method: 'PATCH', user: 'alice@example.com', body: { cover_front: 'covers/front/alice.jpg' } }, {}, () => { allowed = true; });
+  assert.equal(allowed, true);
+});
+
 test('select-cover validates URLs and images, bounds downloads, and preserves the old cover on failure', async (t) => {
   const book = db.add_book({ title_native: 'Test', cover_front: 'covers/front/old.jpg' });
   const url = 'https://covers.openlibrary.org/b/id/123-L.jpg';

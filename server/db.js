@@ -58,7 +58,27 @@ db.exec(`
     expires_at INTEGER NOT NULL,
     used       INTEGER DEFAULT 0
   );
+  CREATE TABLE IF NOT EXISTS mail_requests (
+    email TEXT NOT NULL,
+    requested_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_mail_requested ON mail_requests(requested_at);
 `);
+
+// Persistent email budget: restarts must not reset the anti-spam limits.
+export function reserveLoginEmail(email, time = Date.now()) {
+  return tx(() => {
+    db.prepare('DELETE FROM mail_requests WHERE requested_at<=?').run(time - 24 * 60 * 60_000);
+    const rows = db.prepare('SELECT email, requested_at FROM mail_requests').all();
+    const own = rows.filter((r) => r.email === email);
+    const hourAgo = time - 60 * 60_000;
+    if (rows.length >= 50 || rows.filter((r) => r.requested_at > hourAgo).length >= 20
+        || own.filter((r) => r.requested_at > hourAgo).length >= 3
+        || own.some((r) => r.requested_at > time - 60_000)) return false;
+    db.prepare('INSERT INTO mail_requests(email, requested_at) VALUES (?, ?)').run(email, time);
+    return true;
+  });
+}
 
 // descripción: la captura las fuentes que la dan (googlebooks); para bibliotecas ya creadas
 try { db.exec('ALTER TABLE books ADD COLUMN description TEXT'); } catch { /* ya existe */ }
@@ -197,6 +217,10 @@ export function list_books(filter = {}, owner = '') {
   sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY b.location_shelf, b.location_row, b.location_pos, b.created_at';
   return db.prepare(sql).all(...args).map(rowToBook);
+}
+
+export function ownsCover(path, owner) {
+  return Boolean(db.prepare('SELECT 1 FROM books WHERE owner=? AND (cover_front=? OR scan_back=?) LIMIT 1').get(owner, path, path));
 }
 
 export function update_book(id, patch, owner = '') {

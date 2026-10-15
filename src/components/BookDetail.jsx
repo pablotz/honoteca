@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { displayTitle, displayAuthor, blurbText } from '../lib/book.js';
 import Cover3D from './Cover3D.jsx';
 import CoverCarousel from './CoverCarousel.jsx';
+import Icon from './Icon.jsx';
 
 // Ficha FLOTANTE (sin caja): título centrado, línea, autor, libro y botones. El contenedor no
 // se mueve: al elegir otro libro solo cambian los VALORES (el bloque hace un fundido suave).
@@ -59,7 +60,7 @@ export default function BookDetail({ book, visible, onBack, onAddCover, onDelete
 
   return (
     <aside className={`detail-panel${visible ? ' show' : ''}`} aria-label={`${t('Ficha de', 'Details for')} ${ttl}`}>
-      <button type="button" className="panel-close" onClick={onBack} title={t("Volver al estante", "Back to shelf")} aria-label={t("Cerrar y volver al estante", "Close and return to shelf")}>✕</button>
+      <button type="button" className="panel-close" onClick={onBack} title={t("Volver al estante", "Back to shelf")} aria-label={t("Cerrar y volver al estante", "Close and return to shelf")}><Icon name="close" /></button>
 
       <div className="pane" key={book.id}>
         <h2 className="ptitle" ref={titleRef}>{ttl}</h2>
@@ -78,15 +79,14 @@ export default function BookDetail({ book, visible, onBack, onAddCover, onDelete
             />
           ) : (
             <button type="button" className="ppub-btn" onClick={() => setEditPub(true)} title={t("Cambiar editorial", "Edit publisher")}>
-              {book.publisher ? <>{book.publisher} <span className="edit-pen">✎</span></> : t("+ agregar editorial", "+ add publisher")}
+              {book.publisher || t("Agregar editorial", "Add publisher")} <Icon name="edit" />
             </button>
           )}
         </div>
 
         <Cover3D book={book} style={book.id ? { viewTransitionName: `b${book.id}` } : undefined} />
-        {desc && <div className="cv-hint">{t("Toca el libro para ver un adelanto de la sinopsis", "Tap the book for a synopsis preview")}</div>}
         {desc && (
-          <button type="button" className="btn ghost synopsis-read" onClick={() => synopsisRef.current.showModal()}>{t("Leer Sinopsis", "Read Synopsis")}</button>
+          <button type="button" className="btn ghost" onClick={() => synopsisRef.current.showModal()}><Icon name="read" />{t("Leer Sinopsis", "Read Synopsis")}</button>
         )}
 
         {desc && (
@@ -112,18 +112,18 @@ export default function BookDetail({ book, visible, onBack, onAddCover, onDelete
               <div className="cv-hint">{t("No se hallaron otras portadas online · puedes subir una foto", "No other covers found online · you can upload a photo")}</div>
             )}
             <button type="button" className="btn coverbtn" onClick={() => onAddCover(book.id)}>
-              {hasCover ? t("＋ subir foto de portada", "＋ upload cover photo") : t("＋ subir portada", "＋ upload cover")}
+              <Icon name="upload" />{hasCover ? t("subir foto de portada", "upload cover photo") : t("subir portada", "upload cover")}
             </button>
             <button type="button" className="retry-cover" onClick={loadCovers} disabled={loadingCovers}>
-              {loadingCovers ? t("buscando ediciones…", "finding editions…") : t("🖼 elegir portada online", "🖼 choose online cover")}
+              <Icon name="image" />{loadingCovers ? t("buscando ediciones…", "finding editions…") : t("elegir portada online", "choose online cover")}
             </button>
             <div className="page-foot">
               <button
                 type="button" className="btn"
                 onClick={() => onMove(book, next)}
                 title={book.section === 'buy' ? t("Ya lo compré → mi estante", "Bought it → my shelf") : t("Mover a «por comprar»", "Move to wishlist")}
-              >{t("⇄ Mover", "⇄ Move")}</button>
-              <button type="button" className="btn danger" onClick={() => onDelete(book)} title={t("Eliminar este libro", "Delete this book")}>{t("🗑 Eliminar", "🗑 Delete")}</button>
+              ><Icon name="move" />{t("Mover", "Move")}</button>
+              <button type="button" className="btn danger" onClick={() => onDelete(book)} title={t("Eliminar este libro", "Delete this book")}><Icon name="trash" />{t("Eliminar", "Delete")}</button>
             </div>
           </>
         )}

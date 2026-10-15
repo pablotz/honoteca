@@ -12,8 +12,10 @@
 //   APP_URL         — base para el enlace (si no, se deduce del request / x-forwarded-proto).
 import { Router } from 'express';
 import { newLoginToken, hashToken, signSession, verifySession } from './session.js';
-import { createLoginToken, consumeLoginToken, purgeLoginTokens, claimUnownedBooks } from './db.js';
+import { createLoginToken, consumeLoginToken, purgeLoginTokens, claimUnownedBooks, reserveLoginEmail } from './db.js';
 import { t } from '../src/lib/i18n.js';
+import { rateLimit } from './rateLimit.js';
+import { loginEmail } from './loginEmail.js';
 
 const LINK_TTL = 15 * 60 * 1000;              // el enlace caduca en 15 min
 const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // la sesión dura 30 días
@@ -23,7 +25,40 @@ export function allowedEmails() {
   const raw = [process.env.ALLOWED_EMAILS, process.env.OWNER_EMAIL].filter(Boolean).join(',');
   return [...new Set(raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))];
 }
-export const authOn = () => allowedEmails().length > 0;
+export const publicSignup = () => process.env.PUBLIC_SIGNUP === '1';
+export const authOn = () => publicSignup() || allowedEmails().length > 0;
+const validEmail = (email) => email.length <= 254 && /^[^\s<>"@]+@[^\s<>"@]+\.[^\s<>"@]+$/.test(email);
+const emailAllowed = (email) => validEmail(email) && (publicSignup() || allowedEmails().includes(email));
+
+export function authConfigError() {
+  if (!authOn()) return 'Configure ALLOWED_EMAILS or PUBLIC_SIGNUP.';
+  if ((process.env.AUTH_SECRET || '').length < 32) return 'AUTH_SECRET must contain at least 32 characters.';
+  if (publicSignup()) {
+    for (const name of ['RESEND_API_KEY', 'RESEND_FROM', 'APP_URL', 'TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY']) {
+      if (!process.env[name]) return `Public signup requires ${name}.`;
+    }
+    try {
+      const url = new URL(process.env.APP_URL);
+      if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') throw new Error();
+    } catch { return 'Public signup requires an HTTPS origin in APP_URL.'; }
+  }
+  return null;
+}
+
+async function botVerified(req) {
+  if (!publicSignup()) return true;
+  const token = req.body?.turnstileToken;
+  if (!process.env.TURNSTILE_SECRET_KEY || !process.env.APP_URL || typeof token !== 'string' || !token || token.length > 2048) return false;
+  try {
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ secret: process.env.TURNSTILE_SECRET_KEY, response: token, remoteip: req.ip }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const result = await response.json();
+    return response.ok && result.success === true && result.hostname === new URL(process.env.APP_URL).hostname;
+  } catch { return false; }
+}
 
 function baseUrl(req) {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, '');
@@ -42,9 +77,7 @@ async function sendLink(email, url, language) {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({
-      from, to: email, subject: t('Tu acceso a Honoteca', 'Your Honoteca login', language),
-      html: `<p>${t('Entra a tu biblioteca:', 'Sign in to your library:', language)}</p><p><a href="${url}">${t('Abrir Honoteca', 'Open Honoteca', language)}</a></p>`
-        + `<p style="color:#888">${t('El enlace caduca en 15 minutos y solo sirve una vez.', 'This link expires in 15 minutes and can only be used once.', language)}</p>`,
+      from, to: email, ...loginEmail(url, language),
     }),
     signal: AbortSignal.timeout(10_000),
   });
@@ -56,12 +89,13 @@ const cookieHeader = (value, secure, maxAgeSec) =>
 
 // Devuelve '' en modo abierto (LAN/dev), el email si la sesión es válida y está en la whitelist, o null si no.
 export function sessionUser(req) {
-  const list = allowedEmails();
-  if (!list.length) return '';
+  if (!authOn()) return '';
   const raw = req.headers.cookie || '';
   const m = raw.match(new RegExp(`(?:^|;\\s*)${COOKIE}=([^;]+)`));
-  const email = verifySession(m ? decodeURIComponent(m[1]) : '');
-  return email && list.includes(email) ? email : null;
+  let value = '';
+  try { value = m ? decodeURIComponent(m[1]) : ''; } catch { return null; }
+  const email = verifySession(value);
+  return email && emailAllowed(email) ? email : null;
 }
 
 export const isAuthed = (req) => sessionUser(req) !== null;
@@ -79,29 +113,21 @@ export const auth = Router();
 // ¿ya entré? (y si el correo está configurado, para que la pantalla muestre el aviso correcto)
 auth.get('/auth/me', (req, res) => {
   const user = sessionUser(req);
-  res.json({ authed: user !== null, user: user || null, required: authOn(), mail: Boolean(process.env.RESEND_API_KEY) });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ authed: user !== null, user: user || null, required: authOn(), mail: Boolean(process.env.RESEND_API_KEY), turnstileSiteKey: publicSignup() ? process.env.TURNSTILE_SITE_KEY : null });
 });
 
-// Límite por IP: pedir enlaces es gratis para quien lo pide y caro para ti (correo + cuota).
-// Ventana simple en memoria: 5 intentos cada 15 min. Al pasarse se responde igual (uniforme).
-const RL_WINDOW = 15 * 60 * 1000;
-const RL_MAX = 5;
-const hits = new Map(); // ip → [timestamps]
-function rateLimited(ip) {
-  const now = Date.now();
-  const list = (hits.get(ip) || []).filter((t) => now - t < RL_WINDOW);
-  list.push(now);
-  hits.set(ip, list);
-  if (hits.size > 5000) hits.clear(); // techo de memoria
-  return list.length > RL_MAX;
-}
+const ipLimited = rateLimit({ max: 5, windowMs: 15 * 60_000 });
 
 // pedir enlace. Respuesta uniforme: nunca revela si el correo está en la whitelist.
 auth.post('/auth/request', async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
-  const list = allowedEmails();
-  if (email && list.includes(email) && !rateLimited(req.ip || '?')) {
+  const blocked = ipLimited(req.ip || '?');
+  if (!blocked && emailAllowed(email)
+      && await botVerified(req)
+      && (process.env.RESEND_API_KEY || process.env.NODE_ENV !== 'production')) {
     try {
+      if (!reserveLoginEmail(email)) return res.json({ ok: true });
       purgeLoginTokens();
       const token = newLoginToken();
       createLoginToken(hashToken(token), Date.now() + LINK_TTL, email);
@@ -113,9 +139,11 @@ auth.post('/auth/request', async (req, res) => {
 
 // abrir el enlace → cookie de sesión firmada con ese correo
 auth.get('/auth/verify', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
   const token = String(req.query.token || '');
   const email = token ? consumeLoginToken(hashToken(token)) : false;
-  if (typeof email !== 'string' || !allowedEmails().includes(email)) {
+  if (typeof email !== 'string' || !emailAllowed(email)) {
     return res.status(400).send(t('Enlace inválido, ya usado o caducado. Pide uno nuevo.', 'This link is invalid, already used, or expired. Request a new one.', req.acceptsLanguages('en', 'es') || 'en'));
   }
   if (allowedEmails()[0] === email) claimUnownedBooks(email);

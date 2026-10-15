@@ -11,6 +11,21 @@ const db = await import('./db.js');
 
 after(() => rmSync(dir, { recursive: true, force: true }));
 
+test('email budget persists cooldowns and caps hourly and daily sends', () => {
+  const time = 10_000_000;
+  assert.equal(db.reserveLoginEmail('budget@example.com', time), true);
+  assert.equal(db.reserveLoginEmail('budget@example.com', time + 59_999), false);
+  assert.equal(db.reserveLoginEmail('budget@example.com', time + 60_000), true);
+  assert.equal(db.reserveLoginEmail('budget@example.com', time + 120_000), true);
+  assert.equal(db.reserveLoginEmail('budget@example.com', time + 180_000), false);
+  for (let i = 0; i < 17; i++) assert.equal(db.reserveLoginEmail(`${i}@example.com`, time + 180_000), true);
+  assert.equal(db.reserveLoginEmail('hour-full@example.com', time + 180_000), false);
+  for (let i = 0; i < 20; i++) assert.equal(db.reserveLoginEmail(`${i}@example.com`, time + 4_000_000), true);
+  for (let i = 0; i < 10; i++) assert.equal(db.reserveLoginEmail(`${i}@example.com`, time + 8_000_000), true);
+  assert.equal(db.reserveLoginEmail('day-full@example.com', time + 8_000_000), false);
+  assert.equal(db.reserveLoginEmail('next-day@example.com', time + 24 * 60 * 60_000), true);
+});
+
 test('magic link: un token sirve UNA vez y caduca', () => {
   const once = 'hash-once';
   db.createLoginToken(once, Date.now() + 60_000);
