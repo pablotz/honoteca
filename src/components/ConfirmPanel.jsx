@@ -4,7 +4,7 @@ import Tile from './Tile.jsx';
 import SourcesReport from './SourcesReport.jsx';
 import ScanFrame from './ScanFrame.jsx';
 import CoverCarousel from './CoverCarousel.jsx';
-import { displayAuthor, fmtIsbn, locText } from '../lib/book.js';
+import { displayAuthor, displayTitle, fmtIsbn, locText } from '../lib/book.js';
 import { copyText } from '../lib/clipboard.js';
 
 // ISBN: siempre visible y copiable con un toque (no re-tipear 13 dígitos)
@@ -57,7 +57,7 @@ export default function ConfirmPanel({
   };
 
   let heading, headingCls = '';
-  if (state === 'A' || state === 'D') heading = (m && m.title_native) || (e0 && e0.title_native) || '';
+  if (state === 'A' || state === 'D') heading = displayTitle(m || e0 || {});
   else if (state === 'B') { headingCls = 'none'; heading = session.manual ? t("Escribe el ISBN o el título", "Enter the ISBN or title") : t("No se leyó el código", "Barcode not read"); }
   else {
     headingCls = 'none';

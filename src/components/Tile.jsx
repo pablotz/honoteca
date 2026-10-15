@@ -1,5 +1,6 @@
 import { t } from '../lib/i18n.js';
 import { displayTitle, locText } from '../lib/book.js';
+import Icon from './Icon.jsx';
 
 // Un azulejo de libro. Con portada: solo la tapa. Sin portada: el título ES la portada.
 export default function Tile({ book, showBand = true, onOpen, onAddCover, className = '', vtActive = false }) {
@@ -27,6 +28,7 @@ export default function Tile({ book, showBand = true, onOpen, onAddCover, classN
         <div className="band" style={{ background: book.strip_color || '#3a332a', filter: 'brightness(1.18)' }} />
       )}
       {book.needs_review && <div className="rev" />}
+      {book.loaned_to && <div className="loan-badge" role="img" aria-label={`${t('Prestado a', 'Lent to')} ${book.loaned_to}`} title={`${t('Prestado a', 'Lent to')} ${book.loaned_to}`}><Icon name="move" /></div>}
       {book.section === 'buy' && <div className="wish" aria-label={t("por comprar", "on wishlist")} title={t("por comprar", "on wishlist")}>🛒</div>}
       {!hasCover && saved && (
         <div className="covbadge" title={t("subir portada", "upload cover")} onClick={(e) => { e.stopPropagation(); onAddCover(book.id); }}>＋</div>

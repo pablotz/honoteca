@@ -85,6 +85,8 @@ try { db.exec('ALTER TABLE books ADD COLUMN description TEXT'); } catch { /* ya 
 // section (owned|buy): bibliotecas viejas quedan en 'owned'
 try { db.exec("ALTER TABLE books ADD COLUMN section TEXT NOT NULL DEFAULT 'owned'"); } catch { /* ya existe */ }
 try { db.exec('ALTER TABLE books ADD COLUMN publisher TEXT'); } catch { /* ya existe */ }
+try { db.exec('ALTER TABLE books ADD COLUMN loaned_to TEXT'); } catch { /* ya existe */ }
+try { db.exec('ALTER TABLE books ADD COLUMN loaned_at TEXT'); } catch { /* ya existe */ }
 try { db.exec("ALTER TABLE books ADD COLUMN owner TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_books_owner ON books(owner)'); } catch { /* ya existe */ }
 try { db.exec("ALTER TABLE login_tokens ADD COLUMN email TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
@@ -128,6 +130,8 @@ function rowToBook(row) {
     confidence: row.confidence,
     description: row.description ?? null,
     publisher: row.publisher ?? null,
+    loaned_to: row.loaned_to ?? null,
+    loaned_at: row.loaned_at ?? null,
     needs_review: !!row.needs_review,
     section: row.section || 'owned',
     created_at: row.created_at,
@@ -221,6 +225,20 @@ export function list_books(filter = {}, owner = '') {
 
 export function ownsCover(path, owner) {
   return Boolean(db.prepare('SELECT 1 FROM books WHERE owner=? AND (cover_front=? OR scan_back=?) LIMIT 1').get(owner, path, path));
+}
+
+export function count_books(owner = '') {
+  const counts = { owned: 0, buy: 0 };
+  for (const row of db.prepare('SELECT section, COUNT(*) AS total FROM books WHERE owner=? GROUP BY section').all(owner)) {
+    if (row.section in counts) counts[row.section] = row.total;
+  }
+  return counts;
+}
+
+export function set_loan(id, borrower, owner = '') {
+  db.prepare("UPDATE books SET loaned_to=?, loaned_at=?, updated_at=? WHERE id=? AND owner=? AND section='owned'")
+    .run(borrower, borrower ? new Date().toISOString() : null, now(), id, owner);
+  return get_book(id, owner);
 }
 
 export function update_book(id, patch, owner = '') {

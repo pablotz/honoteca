@@ -38,7 +38,9 @@ export default function App() {
   const [preferredPerRow, setPerRowState] = useState(() => readPreferences().perRow);
   const perRow = Math.max(3, clampPerRow(preferredPerRow, maxPerRow));
   const [books, setBooks] = useState([]);
+  const [bookCounts, setBookCounts] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  const booksRequest = useRef(0);
   const [detail, setDetail] = useState(null);
   const [busy, setBusy] = useState(null);       // { text, modal, scan? } | null
   const [session, setSession] = useState(null); // flujo de escaneo (espejo del `session` viejo)
@@ -72,7 +74,7 @@ export default function App() {
   const doLogout = async () => {
     setLogoutOpen(false);
     await logout();
-    setBooks([]); setDetail(null); setConfirmState(null); setSessionBoth(null);
+    setBooks([]); setBookCounts(null); setDetail(null); setConfirmState(null); setSessionBoth(null);
     setAuth((a) => ({ ...a, authed: false, user: null }));
   };
   const [panelShow, setPanelShow] = useState(false); // el panel se revela al llegar el libro
@@ -102,7 +104,8 @@ export default function App() {
   }, [auth?.authed, auth?.user, theme, view, section, preferredPerRow]);
   useEffect(() => { sectionRef.current = section; }, [section]);
   const changeSection = (s) => {
-    if (s === section) { goLibrary(); return; }
+    if (s === sectionRef.current) { goLibrary(); return; }
+    sectionRef.current = s;
     setSection(s);
     goLibrary(); // cada sección es su propio estante: se vuelve a la balda correspondiente
   };
@@ -124,7 +127,17 @@ export default function App() {
 
   // ---- datos ----
   const refresh = useCallback(async () => {
-    try { setBooks(await api(`/api/books?section=${sectionRef.current}`)); } catch { /* deja lo que había */ }
+    const requestedSection = sectionRef.current;
+    const request = ++booksRequest.current;
+    try {
+      const [result, counts] = await Promise.all([
+        api(`/api/books?section=${requestedSection}`), api('/api/books/counts'),
+      ]);
+      if (request === booksRequest.current && requestedSection === sectionRef.current) {
+        setBooks(result);
+        setBookCounts(counts);
+      }
+    } catch { /* deja lo que había */ }
     setLoaded(true);
   }, []);
   useEffect(() => { if (auth?.authed) refresh(); }, [refresh, auth?.authed]);
@@ -264,7 +277,7 @@ export default function App() {
       }
       setDialogOpen(false);
       goLibrary();
-      showToast('add', (book && (book.title_native || book.title_romaji)) || '');
+      showToast('add', book ? displayTitle(book) : '');
     } catch (e) { setBusy({ text: `${t('no se pudo guardar', 'could not save')}: ${e.message}`, modal }); }
   };
 
@@ -323,15 +336,30 @@ export default function App() {
       showToast('move', displayTitle(book), to === 'buy' ? t("a \"por comprar\"", "to your wishlist") : t("a mi biblioteca", "to your library"));
     } catch { setBusy(null); }
   };
-  const editPublisher = async (book, publisher) => {
+  const editMetadata = async (book, metadata) => {
     try {
       const updated = await api(`/api/books/${book.id}`, {
         method: 'PATCH', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ publisher }),
+        body: JSON.stringify(metadata),
       });
       setDetail(updated);
       refresh();
     } catch { /* ignorar */ }
+  };
+
+  const refreshSynopsis = async (book) => {
+    const result = await api(`/api/books/${book.id}/synopsis`, { method: 'POST' });
+    if (result.book) { setDetail(result.book); refresh(); }
+    return result.found;
+  };
+
+  const setLoan = async (book, borrower) => {
+    const updated = await api(`/api/books/${book.id}/loan`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ borrower }),
+    });
+    setDetail((current) => current?.id === book.id ? updated : current);
+    refresh();
   };
 
   // ---- diálogo «＋» ----
@@ -346,18 +374,15 @@ export default function App() {
   const doneExisting = () => { if (sessionRef.current?._modal) setDialogOpen(false); goLibrary(); };
 
   const selectOnlineCover = async (book, ed) => {
-    setBusy({ text: t("aplicando portada…", "applying cover…"), modal: false });
     try {
       const r = await api(`/api/books/${book.id}/select-cover`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ cover_url: ed.cover_url, publisher: ed.publisher || book.publisher }),
       });
-      setBusy(null);
       if (r.book) setDetail(r.book);
       refresh();
       showToast('info', displayTitle(book), ed.publisher ? `${t('Portada', 'Cover')} · ${ed.publisher}` : t("¡portada actualizada!", "cover updated!"));
     } catch {
-      setBusy(null);
       showToast('info', displayTitle(book), t("no se pudo aplicar la portada", "could not apply the cover"));
     }
   };
@@ -400,7 +425,7 @@ export default function App() {
       <Header
         view={view} onView={(v) => reflowBooks(() => setView(v))}
         theme={theme} onCycleTheme={cycleTheme}
-        section={section} onSection={changeSection}
+        section={section} onSection={changeSection} bookCounts={bookCounts}
         perRow={perRow} maxPerRow={maxPerRow} onPerRow={(v) => reflowBooks(() => setPerRow(v))}
         onAdd={openNew}
         onLogout={() => setLogoutOpen(true)}
@@ -421,7 +446,7 @@ export default function App() {
             <div className="split">
               <div className="split-shelf">{libraryView}</div>
               {detail
-                ? <BookDetail key={detail.id} book={detail} visible={panelShow} onBack={closeDetail} onAddCover={addCoverTo} onDelete={setDeleteTarget} onMove={(book, to) => setMoveTarget({ book, to })} onSelectCover={selectOnlineCover} onEditPublisher={editPublisher} />
+                ? <BookDetail key={detail.id} book={detail} visible={panelShow} onBack={closeDetail} onAddCover={addCoverTo} onDelete={setDeleteTarget} onMove={(book, to) => setMoveTarget({ book, to })} onSelectCover={selectOnlineCover} onEditMetadata={editMetadata} onRefreshSynopsis={refreshSynopsis} onSetLoan={setLoan} />
                 : <aside className="detail-panel" aria-hidden="true" />}
             </div>
           )}

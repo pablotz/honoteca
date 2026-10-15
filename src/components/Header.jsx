@@ -2,15 +2,15 @@ import { t } from '../lib/i18n.js';
 import Icon from './Icon.jsx';
 // Cabecera: sección (mi estante / por comprar), vistas, tema, libros por balda, escanear.
 // La sección NO pregunta al guardar: lo escaneado cae en el estante que esté activo aquí.
-export default function Header({ view, onView, theme, onCycleTheme, section, onSection, perRow, maxPerRow, onPerRow, onAdd, onLogout, user }) {
+export default function Header({ view, onView, theme, onCycleTheme, section, onSection, bookCounts, perRow, maxPerRow, onPerRow, onAdd, onLogout, user }) {
   return (
     <header>
       <img src="/apple-touch-icon.png" alt="Honoteca" className="brand-ico" />
       <button type="button" className={`ico${view === 'shelf' ? ' active' : ''}`} aria-label={t("Estante", "Shelf")} aria-pressed={view === 'shelf'} title={t("Estante", "Shelf")} onClick={() => onView('shelf')}><Icon name="shelf" /></button>
       <button type="button" className={`ico${view === 'grid' ? ' active' : ''}`} aria-label={t("Cuadrícula", "Grid")} aria-pressed={view === 'grid'} title={t("Cuadrícula", "Grid")} onClick={() => onView('grid')}><Icon name="grid" /></button>
       <span className="seg" role="tablist" aria-label={t("Sección de la biblioteca", "Library section")}>
-        <button type="button" role="tab" aria-selected={section === 'owned'} className={section === 'owned' ? 'active' : ''} onClick={() => onSection('owned')}>{t("Mi estante", "My shelf")}</button>
-        <button type="button" role="tab" aria-selected={section === 'buy'} className={section === 'buy' ? 'active' : ''} onClick={() => onSection('buy')}>{t("Comprar", "Wishlist")}</button>
+        <button type="button" role="tab" aria-selected={section === 'owned'} className={section === 'owned' ? 'active' : ''} onClick={() => onSection('owned')}><Icon name="shelf" />{t("Mi estante", "My shelf")}{bookCounts && <span className="section-count">{bookCounts.owned}</span>}</button>
+        <button type="button" role="tab" aria-selected={section === 'buy'} className={section === 'buy' ? 'active' : ''} onClick={() => onSection('buy')}><Icon name="cart" />{t("Comprar", "Wishlist")}{bookCounts && <span className="section-count">{bookCounts.buy}</span>}</button>
       </span>
       <button type="button" className="ico" title={`${t('Tema', 'Theme')}: ${{ dark: t('Oscuro', 'Dark'), sepia: t('Sepia', 'Sepia'), light: t('Claro', 'Light') }[theme]}`} onClick={onCycleTheme}><Icon name="theme" /></button>
       <div className="perrow" role="group" aria-label={t('Libros por balda', 'Books per shelf')}>

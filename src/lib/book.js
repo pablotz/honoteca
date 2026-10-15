@@ -3,7 +3,7 @@ import { t } from './i18n.js';
 // El crudo se guarda (procedencia); lo que se VE va normalizado (§5).
 
 export const displayTitle = (b) =>
-  b.title_native || b.title_romaji || `ISBN ${fmtIsbn(b.isbn)}`;
+  (b.title_native || b.title_romaji || `ISBN ${fmtIsbn(b.isbn)}`).normalize('NFKC').replace(/\s+/g, ' ').trim();
 
 export function displayAuthor(b) {
   const a = b.authors && b.authors[0];
@@ -12,7 +12,7 @@ export function displayAuthor(b) {
 
 // openbd: "夏目,漱石,1867-1916" → "夏目漱石"  |  "Boswell,Dustin,1976-" → "Dustin Boswell"
 export function normalizeAuthor(a) {
-  const parts = String(a).split(',').map((s) => s.trim()).filter((s) => s && !/^\d{4}(-\d{0,4})?$/.test(s));
+  const parts = String(a).normalize('NFKC').replace(/\s+/g, ' ').split(',').map((s) => s.trim()).filter((s) => s && !/^\d{4}(-\d{0,4})?$/.test(s));
   if (parts.length >= 2 && /^[A-Za-z]/.test(parts[0])) return `${parts.slice(1).join(' ')} ${parts[0]}`.trim();
   return parts.join('');
 }

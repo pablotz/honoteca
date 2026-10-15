@@ -7,24 +7,40 @@ import Icon from './Icon.jsx';
 
 // Ficha FLOTANTE (sin caja): título centrado, línea, autor, libro y botones. El contenedor no
 // se mueve: al elegir otro libro solo cambian los VALORES (el bloque hace un fundido suave).
-export default function BookDetail({ book, visible, onBack, onAddCover, onDelete, onMove, onSelectCover, onEditPublisher }) {
+export default function BookDetail({ book, visible, onBack, onAddCover, onDelete, onMove, onSelectCover, onEditMetadata, onRefreshSynopsis, onSetLoan }) {
   const ttl = displayTitle(book);
   const hasCover = !!(book.cover_front || book.cover_url);
   const au = displayAuthor(book);
   const desc = blurbText(book.description, book);
   const next = book.section === 'buy' ? 'owned' : 'buy';
-  const [editPub, setEditPub] = useState(false);
-  const [pubVal, setPubVal] = useState(book.publisher || '');
+  const [editing, setEditing] = useState(false);
+  const [titleVal, setTitleVal] = useState('');
+  const [pubVal, setPubVal] = useState('');
+  const [authorVal, setAuthorVal] = useState('');
   const [editions, setEditions] = useState(null); // null = cerrado; [] = sin resultados; [...] = carrusel
   const [loadingCovers, setLoadingCovers] = useState(false);
+  const [loadingSynopsis, setLoadingSynopsis] = useState(false);
+  const [synopsisStatus, setSynopsisStatus] = useState('');
+  const [lending, setLending] = useState(false);
+  const [borrower, setBorrower] = useState('');
+  const [savingLoan, setSavingLoan] = useState(false);
+  const [loanError, setLoanError] = useState(false);
   const synopsisRef = useRef(null);
+  const metadataRef = useRef(null);
 
   useEffect(() => {
-    setEditPub(false);
+    setEditing(false);
     setPubVal(book.publisher || '');
+    setAuthorVal((book.authors || []).map((author) => String(author).normalize('NFKC').replace(/\s+/g, ' ').trim()).join('; '));
     setEditions(null);
     setLoadingCovers(false);
   }, [book.id, book.publisher]);
+
+  useEffect(() => {
+    const d = metadataRef.current;
+    if (editing && !d.open) d.showModal();
+    if (!editing && d.open) d.close();
+  }, [editing]);
 
   const loadCovers = async () => {
     if (loadingCovers) return;
@@ -39,10 +55,26 @@ export default function BookDetail({ book, visible, onBack, onAddCover, onDelete
     }
   };
 
-  const savePub = () => {
-    setEditPub(false);
-    const trimmed = pubVal.trim();
-    if (trimmed !== (book.publisher || '') && onEditPublisher) onEditPublisher(book, trimmed || null);
+  const saveMetadata = (e) => {
+    e.preventDefault();
+    setEditing(false);
+    const title = titleVal.trim();
+    const publisher = pubVal.trim();
+    const authors = authorVal.split(/\s*;\s*/).map((author) => author.trim()).filter(Boolean);
+    if ((title !== (book.title_native || '') || publisher !== (book.publisher || '') || JSON.stringify(authors) !== JSON.stringify(book.authors || [])) && onEditMetadata) {
+      onEditMetadata(book, { title_native: title || null, publisher: publisher || null, authors });
+    }
+  };
+
+  const saveLoan = async (name) => {
+    setSavingLoan(true);
+    setLoanError(false);
+    try {
+      await onSetLoan(book, name);
+      setLending(false);
+      setBorrower('');
+    } catch { setLoanError(true); }
+    finally { setSavingLoan(false); }
   };
 
   // Título: 2 líneas MÁXIMO. Si no cabe, se reduce la fuente (hasta 16px); si aún así sobra, recorta.
@@ -67,28 +99,13 @@ export default function BookDetail({ book, visible, onBack, onAddCover, onDelete
         <span className="prule" aria-hidden="true" />
         <div className="pmeta">
           {au && <div className="pauthor">{au}</div>}
-          {editPub ? (
-            <input
-              className="input pub-input"
-              placeholder={t("Editorial…", "Publisher…")}
-              value={pubVal}
-              onChange={(e) => setPubVal(e.target.value)}
-              onBlur={savePub}
-              onKeyDown={(e) => { if (e.key === 'Enter') savePub(); if (e.key === 'Escape') setEditPub(false); }}
-              autoFocus
-            />
-          ) : (
-            <button type="button" className="ppub-btn" onClick={() => setEditPub(true)} title={t("Cambiar editorial", "Edit publisher")}>
-              {book.publisher || t("Agregar editorial", "Add publisher")} <Icon name="edit" />
-            </button>
-          )}
+          <div className="ppub">{book.publisher || t("Sin editorial", "No publisher")}</div>
         </div>
 
         <Cover3D book={book} style={book.id ? { viewTransitionName: `b${book.id}` } : undefined} />
         {desc && (
           <button type="button" className="btn ghost" onClick={() => synopsisRef.current.showModal()}><Icon name="read" />{t("Leer Sinopsis", "Read Synopsis")}</button>
         )}
-
         {desc && (
           <dialog ref={synopsisRef} className="synopsis-dialog" aria-labelledby="synopsis-title" onClick={(e) => { if (e.target === synopsisRef.current) synopsisRef.current.close(); }}>
             <div className="nd">
@@ -101,30 +118,67 @@ export default function BookDetail({ book, visible, onBack, onAddCover, onDelete
 
         {book.id && (
           <>
-            {editions && editions.length > 0 && (
-              <CoverCarousel
-                editions={editions}
-                selectedUrl={book.cover_url}
-                onSelect={(ed) => onSelectCover && onSelectCover(book, ed)}
-              />
-            )}
-            {editions && editions.length === 0 && (
-              <div className="cv-hint">{t("No se hallaron otras portadas online · puedes subir una foto", "No other covers found online · you can upload a photo")}</div>
-            )}
-            <button type="button" className="btn coverbtn" onClick={() => onAddCover(book.id)}>
-              <Icon name="upload" />{hasCover ? t("subir foto de portada", "upload cover photo") : t("subir portada", "upload cover")}
+            <button type="button" className="btn coverbtn" onClick={() => { setTitleVal(ttl); setPubVal(book.publisher || ''); setAuthorVal((book.authors || []).map((author) => String(author).normalize('NFKC').replace(/\s+/g, ' ').trim()).join('; ')); setEditing(true); }}>
+              <Icon name="edit" />{t("Editar datos y portada", "Edit details and cover")}
             </button>
-            <button type="button" className="retry-cover" onClick={loadCovers} disabled={loadingCovers}>
-              <Icon name="image" />{loadingCovers ? t("buscando ediciones…", "finding editions…") : t("elegir portada online", "choose online cover")}
-            </button>
-            <div className="page-foot">
+            <dialog ref={metadataRef} className="metadata-dialog" aria-labelledby="metadata-title" onClose={() => setEditing(false)} onClick={(e) => { if (e.target === metadataRef.current) metadataRef.current.close(); }}>
+              <form className="nd" onSubmit={saveMetadata}>
+                <h2 id="metadata-title" className="nd-title">{t("Editar libro", "Edit book")}</h2>
+                <div className="metadata-fields">
+                  <label htmlFor="edit-book-title">{t("Título", "Title")}</label>
+                  <input id="edit-book-title" className="input" value={titleVal} onChange={(e) => setTitleVal(e.target.value)} maxLength={300} />
+                  <label htmlFor="edit-book-authors">{t("Autor(es)", "Author(s)")}</label>
+                  <input id="edit-book-authors" className="input" value={authorVal} onChange={(e) => setAuthorVal(e.target.value)} maxLength={300} />
+                  <label htmlFor="edit-book-publisher">{t("Editorial", "Publisher")}</label>
+                  <input id="edit-book-publisher" className="input" value={pubVal} onChange={(e) => setPubVal(e.target.value)} maxLength={120} />
+                </div>
+                <div className="metadata-cover-actions">
+                  <button type="button" className="retry-cover" onClick={() => { metadataRef.current.close(); onAddCover(book.id); }}><Icon name="upload" />{hasCover ? t("Subir foto de portada", "Upload cover photo") : t("Subir portada", "Upload cover")}</button>
+                  <button type="button" className="retry-cover" onClick={loadCovers} disabled={loadingCovers}>
+                    <Icon name="image" />{loadingCovers ? t("buscando ediciones…", "finding editions…") : t("Buscar portadas online", "Find online covers")}
+                  </button>
+                </div>
+                {editions?.length > 0 && <CoverCarousel editions={editions} selectedUrl={book.cover_url} onSelect={(ed) => onSelectCover && onSelectCover(book, ed)} />}
+                {editions?.length === 0 && <div className="cv-hint">{t("No se hallaron otras portadas online", "No other online covers found")}</div>}
+                <div className="synopsis-refresh">
+                  <button type="button" className="retry-cover" disabled={loadingSynopsis} onClick={async () => {
+                    setLoadingSynopsis(true);
+                    setSynopsisStatus('');
+                    try { setSynopsisStatus(await onRefreshSynopsis(book) ? 'found' : 'missing'); }
+                    catch { setSynopsisStatus('error'); }
+                    finally { setLoadingSynopsis(false); }
+                  }}><Icon name="read" />{loadingSynopsis ? t('Buscando sinopsis…', 'Searching synopsis…') : t('Buscar / actualizar sinopsis', 'Find / refresh synopsis')}</button>
+                  {synopsisStatus && <span role="status">{synopsisStatus === 'found' ? t('Sinopsis actualizada', 'Synopsis updated') : synopsisStatus === 'missing' ? t('No se encontró sinopsis; puedes volver a intentarlo.', 'No synopsis found; you can try again.') : t('No se pudo buscar la sinopsis.', 'Could not search for a synopsis.')}</span>}
+                </div>
+                <div className="metadata-footer">
+                  <button type="submit" className="btn"><Icon name="edit" />{t("Guardar datos", "Save details")}</button>
+                  <button type="button" className="btn ghost" onClick={() => metadataRef.current.close()}>{t("Cerrar", "Close")}</button>
+                </div>
+              </form>
+            </dialog>
+            {book.section !== 'buy' && <div className="loan-controls">
+              {book.loaned_to ? <>
+                <p className="loan-summary"><Icon name="move" /><span>{t('Prestado a', 'Lent to')} <strong>{book.loaned_to}</strong>{book.loaned_at && <small>{t('Desde', 'Since')} {new Date(book.loaned_at).toLocaleDateString()}</small>}</span></p>
+                <button type="button" className="retry-cover" disabled={savingLoan} onClick={() => saveLoan(null)}>{savingLoan ? t('Guardando…', 'Saving…') : t('Marcar devuelto', 'Mark returned')}</button>
+              </> : lending ? <form className="loan-form" aria-busy={savingLoan} onSubmit={(e) => { e.preventDefault(); if (borrower.trim()) saveLoan(borrower.trim()); }}>
+                  <label htmlFor="loan-borrower">{t('¿A quién se lo prestaste?', 'Who did you lend it to?')}</label>
+                  <div className="loan-form-row">
+                    <input id="loan-borrower" className="input" value={borrower} onChange={(e) => setBorrower(e.target.value)} maxLength={120} required autoFocus />
+                    <button type="submit" className="btn" disabled={savingLoan || !borrower.trim()} aria-label={t('Guardar préstamo', 'Save loan')} title={t('Guardar préstamo', 'Save loan')}><Icon name="check" /></button>
+                    <button type="button" className="btn ghost" disabled={savingLoan} aria-label={t('Cancelar', 'Cancel')} title={t('Cancelar', 'Cancel')} onClick={() => { setLending(false); setLoanError(false); }}><Icon name="close" /></button>
+                  </div>
+                </form> : <button type="button" className="retry-cover" onClick={() => { setLoanError(false); setLending(true); }}><Icon name="move" />{t('Prestar libro', 'Lend book')}</button>}
+              {loanError && <p role="alert">{t('No se pudo guardar el préstamo. Inténtalo de nuevo.', 'Could not save the loan. Please try again.')}</p>}
+            </div>}
+            {!lending && <div className="page-foot">
               <button
                 type="button" className="btn"
+                disabled={!!book.loaned_to}
                 onClick={() => onMove(book, next)}
-                title={book.section === 'buy' ? t("Ya lo compré → mi estante", "Bought it → my shelf") : t("Mover a «por comprar»", "Move to wishlist")}
+                title={book.loaned_to ? t('Marca el libro como devuelto antes de moverlo', 'Mark the book returned before moving it') : book.section === 'buy' ? t("Ya lo compré → mi estante", "Bought it → my shelf") : t("Mover a «por comprar»", "Move to wishlist")}
               ><Icon name="move" />{t("Mover", "Move")}</button>
               <button type="button" className="btn danger" onClick={() => onDelete(book)} title={t("Eliminar este libro", "Delete this book")}><Icon name="trash" />{t("Eliminar", "Delete")}</button>
-            </div>
+            </div>}
           </>
         )}
       </div>

@@ -361,7 +361,7 @@ const stripHtml = (s) => String(s || '')
   .replace(/\s+/g, ' ')
   .trim();
 
-const normKey = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+const normKey = (s) => String(s || '').normalize('NFKC').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 
 // Sinopsis comercial en español desde Apple Books (MX/ES, sin key): contraportada real de la edición.
 export async function esBookDescription(title, author) {
@@ -409,7 +409,7 @@ export async function esWikiIntro(title) {
     const r = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT), headers: { 'user-agent': 'Honoteca/1.0' } });
     if (!r.ok) return null;
     const pages = Object.values((await r.json()).query?.pages || {});
-    const p = pages.find((x) => !x.missing && x.extract && x.extract.length >= 40 && !WIKI_NO_BOOK.test(x.extract.slice(0, 110)));
+    const p = pages.find((x) => !x.missing && normKey(x.title) === normKey(t) && x.extract && x.extract.length >= 40 && !WIKI_NO_BOOK.test(x.extract.slice(0, 110)));
     return p ? p.extract.replace(/\s+/g, ' ').trim().slice(0, 1400) : null;
   };
   try {
@@ -422,7 +422,7 @@ export async function esWikiIntro(title) {
     if (!sr.ok) return null;
     const want = normKey(t);
     for (const hit of (await sr.json()).query?.search || []) {
-      if (!normKey(hit.title).includes(want)) continue;
+      if (!want || normKey(hit.title) !== want) continue;
       const ext = await fetchExtract(hit.title);
       if (ext && !isEnglishText(ext)) return ext;
     }
@@ -450,7 +450,7 @@ export async function gbDescription(isbn) {
 export async function resolveDescription(hit, isbn) {
   if (!hit) return null;
   const allowEn = isEnglishPublisher(hit.publisher, isbn || hit.isbn);
-  const valid = (d) => Boolean(d && d.length >= 30 && (allowEn || !isEnglishText(d)));
+  const valid = (d) => Boolean(d && d.length >= 30 && (allowEn ? isEnglishText(d) : !isEnglishText(d)));
 
   const gd = (isbn || hit.isbn) ? await gbDescription(isbn || hit.isbn) : null;
   if (valid(gd)) return gd;
@@ -485,7 +485,9 @@ export async function lookup_isbn(raw) {
   // Una fuente que necesita key y no la tiene NO entra en la cadena: no se pregunta, no se
   // reporta. Un «skipped» solo vale cuando la app de verdad quería preguntar y no pudo; si no
   // hay key, ese «falta configurarlo» es ruido permanente en pantalla, no deuda del usuario.
-  const active = SOURCES.filter(([, , envVar]) => !envVar || Boolean(process.env[envVar]));
+  const japaneseEdition = /^(?:9784|4)/.test(isbn);
+  const active = SOURCES.filter(([name, , envVar]) =>
+    (japaneseEdition || (name !== 'openbd' && name !== 'NDL')) && (!envVar || Boolean(process.env[envVar])));
   for (const [name, fn, envVar] of active) {
     try {
       const hit = await fn(isbn);

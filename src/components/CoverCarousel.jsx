@@ -52,6 +52,7 @@ export default function CoverCarousel({ editions = [], selectedUrl, onSelect, la
                   onError={() => setHidden((h) => ({ ...h, [ed.cover_url]: true }))}
                 />
               </div>
+              {active && <span className="c-card-selected"><Icon name="check" /></span>}
               <span className="c-card-pub">{ed.publisher || t("Otra edición", "Other edition")}</span>
             </button>
           );

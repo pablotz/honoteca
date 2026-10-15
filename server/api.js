@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { renameSync, existsSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, resolve, sep } from 'node:path';
-import { add_book, get_book, list_books, update_book, update_title, find_by_isbn, escalateNeedsReview, clearNeedsReview, remove_book, coverStillUsed, tx, cleanIsbn, TITLE_FIELDS as DB_TITLE_FIELDS } from './db.js';
+import { add_book, get_book, list_books, count_books, set_loan, update_book, update_title, find_by_isbn, escalateNeedsReview, clearNeedsReview, remove_book, coverStillUsed, tx, cleanIsbn, TITLE_FIELDS as DB_TITLE_FIELDS } from './db.js';
 import { uploadPhoto, COVERS, TMP } from './upload.js';
 import { lookup_isbn, cover_by_title, search_by_title, search_editions, resolveDescription, isEnglishText, isEnglishPublisher } from './meta.js';
 import { rateLimit } from './rateLimit.js';
@@ -143,6 +143,10 @@ api.get('/search', async (req, res) => {
   }
 });
 
+api.get('/books/counts', (req, res) => {
+  res.json(count_books(req.user));
+});
+
 api.get('/books/:id', (req, res) => {
   const b = get_book(req.params.id, req.user);
   if (!b) return res.status(404).json({ error: 'no existe' });
@@ -150,9 +154,38 @@ api.get('/books/:id', (req, res) => {
 });
 
 api.patch('/books/:id', (req, res) => {
+  if (req.body?.section === 'buy' && get_book(req.params.id, req.user)?.loaned_to) {
+    return res.status(409).json({ error: 'Mark the book returned before moving it to the wishlist.' });
+  }
   const b = update_book(req.params.id, req.body || {}, req.user);
   if (!b) return res.status(404).json({ error: 'no existe' });
   res.json(b);
+});
+
+api.patch('/books/:id/loan', (req, res) => {
+  const book = get_book(req.params.id, req.user);
+  if (!book) return res.status(404).json({ error: 'no existe' });
+  if (book.section !== 'owned') return res.status(409).json({ error: 'Only shelf books can be lent out.' });
+  const borrower = req.body?.borrower;
+  if (borrower !== null && (typeof borrower !== 'string' || !borrower.trim() || borrower.trim().length > 120)) {
+    return res.status(400).json({ error: 'Enter a borrower name (1–120 characters), or null to mark returned.' });
+  }
+  res.json(set_loan(book.id, borrower === null ? null : borrower.trim(), req.user));
+});
+
+api.post('/books/:id/synopsis', async (req, res) => {
+  const book = get_book(req.params.id, req.user);
+  if (!book) return res.status(404).json({ error: 'no existe' });
+  try {
+    const description = await resolveDescription(book, book.isbn);
+    if (description) {
+      if (book.isbn) update_title(book.isbn, { description }, req.user);
+      else update_book(book.id, { description }, req.user);
+    }
+    res.json({ book: get_book(book.id, req.user), found: Boolean(description) });
+  } catch {
+    res.status(502).json({ error: 'no se pudo buscar la sinopsis' });
+  }
 });
 
 // Borrado: un renglón = un ejemplar. La portada (cover_front) solo se borra del disco si

@@ -10,7 +10,31 @@ process.env.BIBLIOTECA_DB = join(dir, 'test.db');
 const { api } = await import('./api.js');
 const db = await import('./db.js');
 const handler = api.stack.find((s) => s.route?.path === '/books/:id/select-cover').route.stack[0].handle;
+const synopsisHandler = api.stack.find((s) => s.route?.path === '/books/:id/synopsis').route.stack[0].handle;
 after(() => rmSync(dir, { recursive: true, force: true }));
+
+test('loan actions validate names, protect other accounts, and reject wishlist loans', () => {
+  const loan = api.stack.find((s) => s.route?.path === '/books/:id/loan').route.stack[0].handle;
+  const patch = api.stack.find((s) => s.route?.path === '/books/:id' && s.route.methods.patch).route.stack[0].handle;
+  const counts = api.stack.find((s) => s.route?.path === '/books/counts').route.stack[0].handle;
+  const owner = 'loan-api@test.com';
+  const book = db.add_book({ title_native: 'Loan test' }, owner);
+  const wish = db.add_book({ title_native: 'Wishlist', section: 'buy' }, owner);
+  const request = (handler, id, body, user = owner) => {
+    const res = { code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+    handler({ params: { id }, user, body }, res);
+    return res;
+  };
+  for (const borrower of [undefined, '', '   ', 42, {}, 'x'.repeat(121)]) {
+    assert.equal(request(loan, book.id, { borrower }).code, 400);
+  }
+  assert.equal(request(loan, book.id, { borrower: 'Friend' }, 'someone-else@test.com').code, 404);
+  assert.equal(request(loan, wish.id, { borrower: 'Friend' }).code, 409);
+  assert.equal(request(loan, book.id, { borrower: '  Friend  ' }).body.loaned_to, 'Friend');
+  assert.equal(request(patch, book.id, { section: 'buy' }).code, 409);
+  assert.equal(request(loan, book.id, { borrower: null }).body.loaned_to, null);
+  assert.deepEqual(request(counts, book.id).body, { owned: 1, buy: 1 });
+});
 
 test('clients cannot attach another account photo or scan ticket or change a book ID', () => {
   const guard = api.stack[0].handle;
@@ -28,6 +52,18 @@ test('clients cannot attach another account photo or scan ticket or change a boo
   let allowed = false;
   guard({ method: 'PATCH', user: 'alice@example.com', body: { cover_front: 'covers/front/alice.jpg' } }, {}, () => { allowed = true; });
   assert.equal(allowed, true);
+});
+
+test('synopsis retry is account-scoped and keeps stored text when no replacement is found', async () => {
+  const book = db.add_book({ title_native: 'A title', publisher: 'Penguin Press', description: 'short' }, 'alice@example.com');
+  const request = (user) => {
+    const res = { code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+    return synopsisHandler({ params: { id: book.id }, user }, res).then(() => res);
+  };
+  assert.equal((await request('bob@example.com')).code, 404);
+  const result = await request('alice@example.com');
+  assert.equal(result.body.found, false);
+  assert.equal(result.body.book.description, 'short');
 });
 
 test('select-cover validates URLs and images, bounds downloads, and preserves the old cover on failure', async (t) => {

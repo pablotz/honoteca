@@ -11,6 +11,26 @@ const db = await import('./db.js');
 
 after(() => rmSync(dir, { recursive: true, force: true }));
 
+test('loans belong to one physical copy and counts stay account-scoped', () => {
+  const owner = 'loans@test.com';
+  const a = db.add_book({ isbn: '9780593652886', title_native: 'First copy' }, owner);
+  const b = db.add_book({ isbn: a.isbn, title_native: 'Second copy' }, owner);
+  db.add_book({ title_native: 'Wanted', section: 'buy' }, owner);
+  db.add_book({ title_native: 'Private' }, 'other-loans@test.com');
+  assert.equal(db.set_loan(a.id, 'Friend', 'other-loans@test.com'), null);
+  const lent = db.set_loan(a.id, 'Friend', owner);
+  assert.equal(lent.loaned_to, 'Friend');
+  assert.ok(Number.isFinite(Date.parse(lent.loaned_at)));
+  assert.equal(db.get_book(b.id, owner).loaned_to, null);
+  db.update_title(a.isbn, { title_native: 'Updated title' }, owner);
+  assert.equal(db.get_book(a.id, owner).loaned_to, 'Friend');
+  assert.deepEqual(db.count_books(owner), { owned: 2, buy: 1 });
+  assert.deepEqual(db.count_books('empty-loans@test.com'), { owned: 0, buy: 0 });
+  const returned = db.set_loan(a.id, null, owner);
+  assert.equal(returned.loaned_to, null);
+  assert.equal(returned.loaned_at, null);
+});
+
 test('email budget persists cooldowns and caps hourly and daily sends', () => {
   const time = 10_000_000;
   assert.equal(db.reserveLoginEmail('budget@example.com', time), true);

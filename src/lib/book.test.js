@@ -22,6 +22,7 @@ test('normalizeAuthor: openbd estilo JP y "Apellido,Nombre,año"', () => {
   assert.equal(normalizeAuthor('夏目,漱石,1867-1916'), '夏目漱石');
   assert.equal(normalizeAuthor('Boswell,Dustin,1976-'), 'Dustin Boswell');
   assert.equal(normalizeAuthor('Dustin Boswell'), 'Dustin Boswell');
+  assert.equal(normalizeAuthor('ＲｉｃｋＲｕｂｉｎ． ; ＮｅｉｌＳｔｒａｕｓｓ．'), 'RickRubin. ; NeilStrauss.');
 });
 
 test('displayTitle/displayAuthor: preferencia native → romaji → ISBN', () => {
@@ -30,6 +31,7 @@ test('displayTitle/displayAuthor: preferencia native → romaji → ISBN', () =>
   assert.equal(displayTitle({ isbn: '9786073198288' }), 'ISBN 9786073198288');
   assert.equal(displayAuthor({ authors: ['Boswell,Dustin,1976-'] }), 'Dustin Boswell');
   assert.equal(displayAuthor({ authors: [] }), '');
+  assert.equal(displayTitle({ title_native: 'Ｔｈｅ　ｃｒｅａｔｉｖｅ　ａｃｔ' }), 'The creative act');
 });
 
 test('blurbText: quita HTML, colapsa saltos y devuelve null si queda vacío', () => {
