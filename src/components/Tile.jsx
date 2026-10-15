@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js';
 import { displayTitle, locText } from '../lib/book.js';
 
 // Un azulejo de libro. Con portada: solo la tapa. Sin portada: el título ES la portada.
@@ -13,7 +14,7 @@ export default function Tile({ book, showBand = true, onOpen, onAddCover, classN
   else style.background = book.strip_color || '#3a332a';
 
   let titleAttr = `${title}${book.location ? ` · ${locText(book.location)}` : ''}`;
-  if (!hasCover && saved) titleAttr += ' · sin portada (toca ＋)';
+  if (!hasCover && saved) titleAttr += ` · ${t('sin portada (toca ＋)', 'no cover (tap ＋)')}`;
 
   return (
     <div
@@ -26,9 +27,9 @@ export default function Tile({ book, showBand = true, onOpen, onAddCover, classN
         <div className="band" style={{ background: book.strip_color || '#3a332a', filter: 'brightness(1.18)' }} />
       )}
       {book.needs_review && <div className="rev" />}
-      {book.section === 'buy' && <div className="wish" aria-label="por comprar" title="por comprar">🛒</div>}
+      {book.section === 'buy' && <div className="wish" aria-label={t("por comprar", "on wishlist")} title={t("por comprar", "on wishlist")}>🛒</div>}
       {!hasCover && saved && (
-        <div className="covbadge" title="subir portada" onClick={(e) => { e.stopPropagation(); onAddCover(book.id); }}>＋</div>
+        <div className="covbadge" title={t("subir portada", "upload cover")} onClick={(e) => { e.stopPropagation(); onAddCover(book.id); }}>＋</div>
       )}
       {!hasCover && <div className="lbl">{title}</div>}
     </div>

@@ -1,3 +1,4 @@
+import { t } from './lib/i18n.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, lookupMeta } from './lib/api.js';
 import { authMe, logout } from './lib/auth.js';
@@ -69,7 +70,7 @@ export default function App() {
   const reflowRef = useRef(0);
 
   const showToast = (kind, title, note = '') => {
-    setToast({ id: ++toastKey.current, kind, title: title || (kind === 'add' ? 'Libro' : 'El libro'), note });
+    setToast({ id: ++toastKey.current, kind, title: title || (kind === 'add' ? t("Libro", "Book") : t("El libro", "The book")), note });
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2700);
   };
@@ -169,7 +170,7 @@ export default function App() {
   const onPhoto = async (file) => {
     if (!file) return;
     setDialogOpen(false); setConfirmState(null);
-    setBusy({ text: 'leyendo el código…', modal: false, scan: true });
+    setBusy({ text: t("leyendo el código…", "reading the barcode…"), modal: false, scan: true });
     const strip = await computeStrip(file);   // §5.2, en canvas del navegador
     const isbn = await decodeIsbn(file);
     const fd = new FormData();
@@ -185,7 +186,7 @@ export default function App() {
     setSessionBoth({ file, strip, ticket: scan.ticket, isbn, meta: null, sources: [], existing: scan.existing || [], entry: null });
     if (!isbn) {
       // EAN no leído → el título se saca de la MISMA foto antes de pedir el ISBN a mano
-      setBusy({ text: 'leyendo el título de la foto…', modal: false, scan: true });
+      setBusy({ text: t("leyendo el título de la foto…", "reading the cover title…"), modal: false, scan: true });
       const title = await ocrTitleFrom(file);
       patchSession({ entry: title || null });
       return renderConfirm(title ? 'C' : 'B');
@@ -213,7 +214,7 @@ export default function App() {
 
   // Buscar un libro por su nombre (sin ISBN): título → obra de Open Library (portada + sinopsis).
   const searchByTitle = async (q) => {
-    setBusy({ text: 'buscando…', modal: !!sessionRef.current?._modal, search: true });
+    setBusy({ text: t("buscando…", "searching…"), modal: !!sessionRef.current?._modal, search: true });
     let hit = null;
     try { hit = (await api(`/api/search?q=${encodeURIComponent(q)}`)).hit; } catch { /* sin resultado */ }
     patchSession({ entry: q });
@@ -240,7 +241,7 @@ export default function App() {
   const commit = async (state, action, book) => {
     const s = sessionRef.current || {};
     const modal = !!s._modal;
-    setBusy({ text: 'guardando…', modal });
+    setBusy({ text: t("guardando…", "saving…"), modal });
     try {
       const r = await fetch('/api/confirm', {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -256,7 +257,7 @@ export default function App() {
       setDialogOpen(false);
       goLibrary();
       showToast('add', (book && (book.title_native || book.title_romaji)) || '');
-    } catch (e) { setBusy({ text: `no se pudo guardar: ${e.message}`, modal }); }
+    } catch (e) { setBusy({ text: `${t('no se pudo guardar', 'could not save')}: ${e.message}`, modal }); }
   };
 
   const editManual = () => { patchSession({ editManual: true }); renderConfirm('C'); };
@@ -275,7 +276,7 @@ export default function App() {
   };
 
   const uploadCover = async (id, file) => {
-    setBusy({ text: 'subiendo portada…', modal: false });
+    setBusy({ text: t("subiendo portada…", "uploading cover…"), modal: false });
     try {
       const fd = new FormData(); fd.append('photo', file);
       await fetch(`/api/covers/front/${id}`, { method: 'POST', body: fd }).then((x) => x.json());
@@ -287,7 +288,7 @@ export default function App() {
   // ---- borrado / mover de estante ----
   const removeBooks = async (ids, title) => {
     setDeleteTarget(null);
-    setBusy({ text: 'eliminando…', modal: false });
+    setBusy({ text: t("eliminando…", "deleting…"), modal: false });
     let ok = true;
     for (const id of ids) {
       try { await api(`/api/books/${id}`, { method: 'DELETE' }); } catch { ok = false; }
@@ -304,14 +305,14 @@ export default function App() {
     removeBooks([...new Set(ids)], displayTitle(deleteTarget));
   };
   const moveSection = async (book, to) => {
-    setBusy({ text: 'moviendo…', modal: false });
+    setBusy({ text: t("moviendo…", "moving…"), modal: false });
     try {
       await api(`/api/books/${book.id}`, {
         method: 'PATCH', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ section: to }),
       });
       changeSection(to); // te sigue al estante de destino: ves el libro aterrizar
-      showToast('move', displayTitle(book), to === 'buy' ? 'a "por comprar"' : 'a mi biblioteca');
+      showToast('move', displayTitle(book), to === 'buy' ? t("a \"por comprar\"", "to your wishlist") : t("a mi biblioteca", "to your library"));
     } catch { setBusy(null); }
   };
   const editPublisher = async (book, publisher) => {
@@ -330,14 +331,14 @@ export default function App() {
   const dismissDialog = () => { setDialogOpen(false); setSessionBoth(null); setConfirmState(null); setBusy(null); };
   const searchFromDialog = (text) => {
     setSessionBoth({ file: null, strip: { color: null, present: false, mirrored: false }, ticket: null, isbn: null, meta: null, sources: [], existing: [], manual: true, entry: text, _modal: true });
-    setBusy({ text: 'buscando…', modal: true, search: true }); // el resultado vive EN el modal (sin página intermedia)
+    setBusy({ text: t("buscando…", "searching…"), modal: true, search: true }); // el resultado vive EN el modal (sin página intermedia)
     submitManual(text);
   };
   const backToStart = () => { setSessionBoth(null); setConfirmState(null); setBusy(null); setDialogOpen(true); };
   const doneExisting = () => { if (sessionRef.current?._modal) setDialogOpen(false); goLibrary(); };
 
   const selectOnlineCover = async (book, ed) => {
-    setBusy({ text: 'aplicando portada…', modal: false });
+    setBusy({ text: t("aplicando portada…", "applying cover…"), modal: false });
     try {
       const r = await api(`/api/books/${book.id}/select-cover`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -346,10 +347,10 @@ export default function App() {
       setBusy(null);
       if (r.book) setDetail(r.book);
       refresh();
-      showToast('info', displayTitle(book), ed.publisher ? `Portada · ${ed.publisher}` : '¡portada actualizada!');
+      showToast('info', displayTitle(book), ed.publisher ? `${t('Portada', 'Cover')} · ${ed.publisher}` : t("¡portada actualizada!", "cover updated!"));
     } catch {
       setBusy(null);
-      showToast('info', displayTitle(book), 'no se pudo aplicar la portada');
+      showToast('info', displayTitle(book), t("no se pudo aplicar la portada", "could not apply the cover"));
     }
   };
 
@@ -376,9 +377,9 @@ export default function App() {
         <ShelfView books={books} perRow={perRow} onOpen={openBook} onAddCover={addCoverTo} buy={section === 'buy'} holeId={holeId} vtId={vtId} />
         <div className="empty-cta">
           <button type="button" className="btn" onClick={pickPhoto}>
-            {section === 'buy' ? 'Escanear un libro para comprar' : 'Escanear un libro'}
+            {section === 'buy' ? t("Escanear un libro para comprar", "Scan a book to buy") : t("Escanear un libro", "Scan a book")}
           </button>
-          <div className="gest">una foto → ISBN → listo</div>
+          <div className="gest">{t("una foto → ISBN → listo", "one photo → ISBN → done")}</div>
         </div>
       </>
     ) : <EmptyShelf onScan={pickPhoto} buy={section === 'buy'} />)
@@ -399,7 +400,7 @@ export default function App() {
       />
 
       <main>
-        {section === 'buy' && <div className="shelf-cap">Estante de compras: lo que escanees desde aquí cae en esta lista, sin preguntar.</div>}
+        {section === 'buy' && <div className="shelf-cap">{t("Estante de compras: lo que escanees desde aquí cae en esta lista, sin preguntar.", "Wishlist: books scanned here are added to this list automatically.")}</div>}
         {mainBusy ? (busy.scan
           ? <div className="scanwrap"><ScanFrame label={busy.text} /></div>
           : busy.search
@@ -423,14 +424,14 @@ export default function App() {
       {panelShow && <div className="panel-fade" onClick={closeDetail} aria-hidden="true" />}
       {fly && <FlyingBook key={fly.id} book={detail} fly={fly} onArrive={() => setPanelShow(true)} onDone={() => setFly(null)} />}
 
-      <button className="fab" aria-label="Escanear un libro" onClick={openNew}>＋</button>
+      <button className="fab" aria-label={t("Escanear un libro", "Scan a book")} onClick={openNew}>＋</button>
 
       {toast && (
         <div className="toast" role="status">
           <span aria-hidden="true">{toast.kind === 'add' ? '🎉' : toast.kind === 'remove' ? '🗑️' : toast.kind === 'remove-fail' ? '⚠️' : toast.kind === 'info' ? '🖼️' : '⇄'}</span>
-          {toast.kind === 'add' ? <span>¡<b>{toast.title}</b> registrado!</span>
-            : toast.kind === 'remove' ? <span><b>{toast.title}</b> eliminado</span>
-            : toast.kind === 'remove-fail' ? <span>no se pudo eliminar · inténtalo de nuevo</span>
+          {toast.kind === 'add' ? <span><b>{toast.title}</b> {t('registrado!', 'added!')}</span>
+            : toast.kind === 'remove' ? <span><b>{toast.title}</b> {t('eliminado', 'deleted')}</span>
+            : toast.kind === 'remove-fail' ? <span>{t("no se pudo eliminar · inténtalo de nuevo", "could not delete · try again")}</span>
             : toast.kind === 'info' ? <span><b>{toast.title}</b> — {toast.note}</span>
             : <span><b>{toast.title}</b> → {toast.note}</span>}
         </div>
@@ -470,14 +471,14 @@ export default function App() {
 
       <dialog ref={logoutRef} className="logout-dlg" aria-labelledby="logout-title" onClose={() => setLogoutOpen(false)} onClick={(e) => { if (e.target === e.currentTarget) setLogoutOpen(false); }}>
         <div className="nd">
-          <h2 id="logout-title" className="nd-title">Cerrar sesión</h2>
+          <h2 id="logout-title" className="nd-title">{t("Cerrar sesión", "Log out")}</h2>
           <p className="del-book">
-            ¿Seguro que quieres salir de tu biblioteca{auth.user ? <> (<b>{auth.user}</b>)</> : ''}?
-            Tendrás que pedir un nuevo enlace para volver a entrar.
+            {t('¿Seguro que quieres salir de tu biblioteca', 'Log out of your library')}{auth.user ? <> (<b>{auth.user}</b>)</> : ''}?
+            {' '}{t('Tendrás que pedir un nuevo enlace para volver a entrar.', 'You’ll need a new login link to sign in again.')}
           </p>
           <div className="actions">
-            <button type="button" className="btn danger" onClick={doLogout}>Sí, cerrar sesión</button>
-            <button type="button" className="btn ghost" onClick={() => setLogoutOpen(false)} autoFocus>Cancelar</button>
+            <button type="button" className="btn danger" onClick={doLogout}>{t("Sí, cerrar sesión", "Yes, log out")}</button>
+            <button type="button" className="btn ghost" onClick={() => setLogoutOpen(false)} autoFocus>{t("Cancelar", "Cancel")}</button>
           </div>
         </div>
       </dialog>

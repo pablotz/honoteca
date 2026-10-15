@@ -1,8 +1,9 @@
+import { t } from '../lib/i18n.js';
 import { useRef, useState } from 'react';
 
 // Carrusel horizontal de portadas por edición: tocar una miniatura cambia tanto la portada
 // como la editorial asociada. Descarta automáticamente portadas vacías (1x1 de Open Library).
-export default function CoverCarousel({ editions = [], selectedUrl, onSelect, label = 'Elige la portada de tu edición' }) {
+export default function CoverCarousel({ editions = [], selectedUrl, onSelect, label = t("Elige la portada de tu edición", "Choose your edition’s cover") }) {
   const trackRef = useRef(null);
   const [hidden, setHidden] = useState({});
 
@@ -20,8 +21,8 @@ export default function CoverCarousel({ editions = [], selectedUrl, onSelect, la
         <span className="c-carousel-lbl">{label} ({visible.length})</span>
         {visible.length > 3 && (
           <div className="c-carousel-nav">
-            <button type="button" className="c-nav-btn" onClick={() => scroll(-1)} aria-label="Anterior">‹</button>
-            <button type="button" className="c-nav-btn" onClick={() => scroll(1)} aria-label="Siguiente">›</button>
+            <button type="button" className="c-nav-btn" onClick={() => scroll(-1)} aria-label={t("Anterior", "Previous")}>‹</button>
+            <button type="button" className="c-nav-btn" onClick={() => scroll(1)} aria-label={t("Siguiente", "Next")}>›</button>
           </div>
         )}
       </div>
@@ -35,12 +36,12 @@ export default function CoverCarousel({ editions = [], selectedUrl, onSelect, la
               className={`c-card${active ? ' active' : ''}`}
               aria-pressed={active}
               onClick={() => onSelect(ed)}
-              title={ed.publisher ? `Editorial: ${ed.publisher}` : 'Elegir esta portada'}
+              title={ed.publisher ? `${t('Editorial', 'Publisher')}: ${ed.publisher}` : t("Elegir esta portada", "Choose this cover")}
             >
               <div className="c-card-imgwrap">
                 <img
                   src={ed.cover_url}
-                  alt={ed.publisher || 'Portada'}
+                  alt={ed.publisher || t("Portada", "Cover")}
                   loading="lazy"
                   onLoad={(e) => {
                     if (e.currentTarget.naturalWidth < 20) {
@@ -50,7 +51,7 @@ export default function CoverCarousel({ editions = [], selectedUrl, onSelect, la
                   onError={() => setHidden((h) => ({ ...h, [ed.cover_url]: true }))}
                 />
               </div>
-              <span className="c-card-pub">{ed.publisher || 'Otra edición'}</span>
+              <span className="c-card-pub">{ed.publisher || t("Otra edición", "Other edition")}</span>
             </button>
           );
         })}

@@ -1,4 +1,5 @@
 // Helpers puros de presentación/normalización (sin DOM). Portados 1:1 del cliente viejo.
+import { t } from './i18n.js';
 // El crudo se guarda (procedencia); lo que se VE va normalizado (§5).
 
 export const displayTitle = (b) =>
@@ -81,4 +82,4 @@ export function blurbText(text, book) {
   return clean;
 }
 
-export const locText = (l) => `${l.shelf} · fila ${l.row} · ${l.pos}.º`;
+export const locText = (l) => `${l.shelf} · ${t('fila', 'row')} ${l.row} · ${l.pos}${t('.º', '')}`;

@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js';
 import { useEffect, useRef } from 'react';
 import { displayTitle } from '../lib/book.js';
 
@@ -18,19 +19,19 @@ export default function DeleteDialog({ book, onCancel, onRemoveOne, onRemoveAll 
   return (
     <dialog ref={dlgRef} onClose={onCancel} onClick={(e) => { if (e.target === dlgRef.current) onCancel(); }}>
       <div className="nd">
-        <h2 className="nd-title">Eliminar libro</h2>
-        <p className="del-book">¿Eliminar <b>{title}</b> de la biblioteca?
-          {copies > 1 && <> Este título tiene {copies} ejemplares en el estante.</>}</p>
+        <h2 className="nd-title">{t("Eliminar libro", "Delete book")}</h2>
+        <p className="del-book">{t('¿Eliminar', 'Delete')} <b>{title}</b> {t('de la biblioteca?', 'from your library?')}
+          {copies > 1 && <> {t('Ejemplares de este título en el estante:', 'Copies of this title on your shelf:')} {copies}.</>}</p>
         <div className="actions">
           {copies > 1 ? (
             <>
-              <button type="button" className="btn danger" onClick={onRemoveOne}>Quitar solo este ejemplar</button>
-              <button type="button" className="btn ghost danger" onClick={onRemoveAll}>Eliminar libro completo ({copies})</button>
+              <button type="button" className="btn danger" onClick={onRemoveOne}>{t("Quitar solo este ejemplar", "Remove this copy")}</button>
+              <button type="button" className="btn ghost danger" onClick={onRemoveAll}>{t('Eliminar libro completo', 'Delete all copies')} ({copies})</button>
             </>
           ) : (
-            <button type="button" className="btn danger" onClick={onRemoveOne}>Eliminar libro</button>
+            <button type="button" className="btn danger" onClick={onRemoveOne}>{t("Eliminar libro", "Delete book")}</button>
           )}
-          <button type="button" className="btn ghost" onClick={onCancel}>Cancelar</button>
+          <button type="button" className="btn ghost" onClick={onCancel}>{t("Cancelar", "Cancel")}</button>
         </div>
       </div>
     </dialog>

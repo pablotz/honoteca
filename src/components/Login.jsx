@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js';
 import { useState } from 'react';
 import { requestLink } from '../lib/auth.js';
 
@@ -20,20 +21,20 @@ export default function Login({ mail }) {
         <h1 className="login-brand">Honoteca</h1>
         {sent ? (
           <>
-            <p className="login-msg">Te mandé un enlace a <b>{email}</b>. Ábrelo en este dispositivo.</p>
-            <button type="button" className="btn ghost" onClick={() => setSent(false)}>Usar otro correo</button>
+            <p className="login-msg">{t('Te mandé un enlace a', 'A link was sent to')} <b>{email}</b>. {t('Ábrelo en este dispositivo.', 'Open it on this device.')}</p>
+            <button type="button" className="btn ghost" onClick={() => setSent(false)}>{t("Usar otro correo", "Use another email")}</button>
           </>
         ) : (
           <>
-            <p className="login-msg">Entra con tu correo: te mando un enlace de un solo uso.</p>
+            <p className="login-msg">{t("Entra con tu correo: te mando un enlace de un solo uso.", "Enter your email to receive a one-time login link.")}</p>
             <input
-              className="input" type="email" inputMode="email" autoComplete="email" placeholder="tu@correo.com"
+              className="input" type="email" inputMode="email" autoComplete="email" placeholder={t("tu@correo.com", "you@example.com")}
               value={email} onChange={(e) => setEmail(e.target.value)} autoFocus
             />
-            <button type="submit" className="btn" disabled={busy}>{busy ? 'enviando…' : 'Enviar enlace'}</button>
+            <button type="submit" className="btn" disabled={busy}>{busy ? t("enviando…", "sending…") : t("Enviar enlace", "Send link")}</button>
           </>
         )}
-        {!mail && <p className="login-dev">Sin proveedor de correo: el enlace sale en la consola del servidor.</p>}
+        {!mail && <p className="login-dev">{t("Sin proveedor de correo: el enlace sale en la consola del servidor.", "Email delivery is not configured: the link appears in the server logs.")}</p>}
       </form>
     </div>
   );

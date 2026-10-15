@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js';
 import { useEffect, useRef, useState } from 'react';
 import { displayTitle, displayAuthor, blurbText } from '../lib/book.js';
 import Cover3D from './Cover3D.jsx';
@@ -57,8 +58,8 @@ export default function BookDetail({ book, visible, onBack, onAddCover, onDelete
   }, [book.id, ttl]);
 
   return (
-    <aside className={`detail-panel${visible ? ' show' : ''}`} aria-label={`Ficha de ${ttl}`}>
-      <button type="button" className="panel-close" onClick={onBack} title="Volver al estante" aria-label="Cerrar y volver al estante">✕</button>
+    <aside className={`detail-panel${visible ? ' show' : ''}`} aria-label={`${t('Ficha de', 'Details for')} ${ttl}`}>
+      <button type="button" className="panel-close" onClick={onBack} title={t("Volver al estante", "Back to shelf")} aria-label={t("Cerrar y volver al estante", "Close and return to shelf")}>✕</button>
 
       <div className="pane" key={book.id}>
         <h2 className="ptitle" ref={titleRef}>{ttl}</h2>
@@ -68,7 +69,7 @@ export default function BookDetail({ book, visible, onBack, onAddCover, onDelete
           {editPub ? (
             <input
               className="input pub-input"
-              placeholder="Editorial…"
+              placeholder={t("Editorial…", "Publisher…")}
               value={pubVal}
               onChange={(e) => setPubVal(e.target.value)}
               onBlur={savePub}
@@ -76,24 +77,24 @@ export default function BookDetail({ book, visible, onBack, onAddCover, onDelete
               autoFocus
             />
           ) : (
-            <button type="button" className="ppub-btn" onClick={() => setEditPub(true)} title="Cambiar editorial">
-              {book.publisher ? <>{book.publisher} <span className="edit-pen">✎</span></> : '+ agregar editorial'}
+            <button type="button" className="ppub-btn" onClick={() => setEditPub(true)} title={t("Cambiar editorial", "Edit publisher")}>
+              {book.publisher ? <>{book.publisher} <span className="edit-pen">✎</span></> : t("+ agregar editorial", "+ add publisher")}
             </button>
           )}
         </div>
 
         <Cover3D book={book} style={book.id ? { viewTransitionName: `b${book.id}` } : undefined} />
-        {desc && <div className="cv-hint">Toca el libro para ver un adelanto de la sinopsis</div>}
+        {desc && <div className="cv-hint">{t("Toca el libro para ver un adelanto de la sinopsis", "Tap the book for a synopsis preview")}</div>}
         {desc && (
-          <button type="button" className="btn ghost synopsis-read" onClick={() => synopsisRef.current.showModal()}>Leer Sinopsis</button>
+          <button type="button" className="btn ghost synopsis-read" onClick={() => synopsisRef.current.showModal()}>{t("Leer Sinopsis", "Read Synopsis")}</button>
         )}
 
         {desc && (
           <dialog ref={synopsisRef} className="synopsis-dialog" aria-labelledby="synopsis-title" onClick={(e) => { if (e.target === synopsisRef.current) synopsisRef.current.close(); }}>
             <div className="nd">
-              <h2 id="synopsis-title" className="nd-title">Sinopsis · {ttl}</h2>
+              <h2 id="synopsis-title" className="nd-title">{t('Sinopsis', 'Synopsis')} · {ttl}</h2>
               <div className="synopsis-text" tabIndex={0}>{desc}</div>
-              <button type="button" className="btn ghost" onClick={() => synopsisRef.current.close()} autoFocus>Cerrar</button>
+              <button type="button" className="btn ghost" onClick={() => synopsisRef.current.close()} autoFocus>{t("Cerrar", "Close")}</button>
             </div>
           </dialog>
         )}
@@ -108,21 +109,21 @@ export default function BookDetail({ book, visible, onBack, onAddCover, onDelete
               />
             )}
             {editions && editions.length === 0 && (
-              <div className="cv-hint">No se hallaron otras portadas online · puedes subir una foto</div>
+              <div className="cv-hint">{t("No se hallaron otras portadas online · puedes subir una foto", "No other covers found online · you can upload a photo")}</div>
             )}
             <button type="button" className="btn coverbtn" onClick={() => onAddCover(book.id)}>
-              {hasCover ? '＋ subir foto de portada' : '＋ subir portada'}
+              {hasCover ? t("＋ subir foto de portada", "＋ upload cover photo") : t("＋ subir portada", "＋ upload cover")}
             </button>
             <button type="button" className="retry-cover" onClick={loadCovers} disabled={loadingCovers}>
-              {loadingCovers ? 'buscando ediciones…' : '🖼 elegir portada online'}
+              {loadingCovers ? t("buscando ediciones…", "finding editions…") : t("🖼 elegir portada online", "🖼 choose online cover")}
             </button>
             <div className="page-foot">
               <button
                 type="button" className="btn"
                 onClick={() => onMove(book, next)}
-                title={book.section === 'buy' ? 'Ya lo compré → mi estante' : 'Mover a «por comprar»'}
-              >⇄ Mover</button>
-              <button type="button" className="btn danger" onClick={() => onDelete(book)} title="Eliminar este libro">🗑 Eliminar</button>
+                title={book.section === 'buy' ? t("Ya lo compré → mi estante", "Bought it → my shelf") : t("Mover a «por comprar»", "Move to wishlist")}
+              >{t("⇄ Mover", "⇄ Move")}</button>
+              <button type="button" className="btn danger" onClick={() => onDelete(book)} title={t("Eliminar este libro", "Delete this book")}>{t("🗑 Eliminar", "🗑 Delete")}</button>
             </div>
           </>
         )}

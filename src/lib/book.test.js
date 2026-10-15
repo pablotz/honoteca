@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { language } from './i18n.js';
 import { fmtIsbn, normalizeAuthor, displayTitle, displayAuthor, blurbText, validIsbn, locText } from './book.js';
 
 test('fmtIsbn: deja los dígitos tal cual (o —)', () => {
@@ -48,5 +49,5 @@ test('blurbText: solo muestra sinopsis en inglés si la editorial es inglesa', (
 });
 
 test('locText: etiqueta de ubicación', () => {
-  assert.equal(locText({ shelf: 'A', row: 2, pos: 3 }), 'A · fila 2 · 3.º');
+  assert.equal(locText({ shelf: 'A', row: 2, pos: 3 }), language === 'es' ? 'A · fila 2 · 3.º' : 'A · row 2 · 3');
 });

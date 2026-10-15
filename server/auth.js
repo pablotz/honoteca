@@ -13,6 +13,7 @@
 import { Router } from 'express';
 import { newLoginToken, hashToken, signSession, verifySession } from './session.js';
 import { createLoginToken, consumeLoginToken, purgeLoginTokens, claimUnownedBooks } from './db.js';
+import { t } from '../src/lib/i18n.js';
 
 const LINK_TTL = 15 * 60 * 1000;              // el enlace caduca en 15 min
 const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // la sesión dura 30 días
@@ -30,7 +31,7 @@ function baseUrl(req) {
   return `${proto}://${req.headers.host}`;
 }
 
-async function sendLink(email, url) {
+async function sendLink(email, url, language) {
   const key = process.env.RESEND_API_KEY;
   if (!key) { // dev: sin proveedor, el enlace sale por consola
     console.warn(`[honoteca] sin RESEND_API_KEY — enlace de acceso para ${email} (15 min):\n  ${url}`);
@@ -41,9 +42,9 @@ async function sendLink(email, url) {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({
-      from, to: email, subject: 'Tu acceso a Honoteca',
-      html: `<p>Entra a tu biblioteca:</p><p><a href="${url}">Abrir Honoteca</a></p>`
-        + `<p style="color:#888">El enlace caduca en 15 minutos y solo sirve una vez.</p>`,
+      from, to: email, subject: t('Tu acceso a Honoteca', 'Your Honoteca login', language),
+      html: `<p>${t('Entra a tu biblioteca:', 'Sign in to your library:', language)}</p><p><a href="${url}">${t('Abrir Honoteca', 'Open Honoteca', language)}</a></p>`
+        + `<p style="color:#888">${t('El enlace caduca en 15 minutos y solo sirve una vez.', 'This link expires in 15 minutes and can only be used once.', language)}</p>`,
     }),
     signal: AbortSignal.timeout(10_000),
   });
@@ -104,7 +105,7 @@ auth.post('/auth/request', async (req, res) => {
       purgeLoginTokens();
       const token = newLoginToken();
       createLoginToken(hashToken(token), Date.now() + LINK_TTL, email);
-      await sendLink(email, `${baseUrl(req)}/api/auth/verify?token=${encodeURIComponent(token)}`);
+      await sendLink(email, `${baseUrl(req)}/api/auth/verify?token=${encodeURIComponent(token)}`, req.acceptsLanguages('en', 'es') || 'en');
     } catch (e) { console.error('[honoteca] no se pudo enviar el enlace:', e.message); }
   }
   res.json({ ok: true });
@@ -115,7 +116,7 @@ auth.get('/auth/verify', (req, res) => {
   const token = String(req.query.token || '');
   const email = token ? consumeLoginToken(hashToken(token)) : false;
   if (typeof email !== 'string' || !allowedEmails().includes(email)) {
-    return res.status(400).send('Enlace inválido, ya usado o caducado. Pide uno nuevo.');
+    return res.status(400).send(t('Enlace inválido, ya usado o caducado. Pide uno nuevo.', 'This link is invalid, already used, or expired. Request a new one.', req.acceptsLanguages('en', 'es') || 'en'));
   }
   if (allowedEmails()[0] === email) claimUnownedBooks(email);
   const secure = (req.headers['x-forwarded-proto'] || req.protocol) === 'https';

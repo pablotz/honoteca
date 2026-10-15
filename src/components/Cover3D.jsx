@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js';
 import { useLayoutEffect, useRef, useState } from 'react';
 import {
   WebGLRenderer, Scene, PerspectiveCamera, Group, Mesh, BoxGeometry,
@@ -320,7 +321,7 @@ export default function Cover3D({ book, style }) {
   }
 
   return (
-    <div className="bcover bcover3d" style={style} ref={hostRef} role="button" tabIndex={0} aria-label="Girar el libro">
+    <div className="bcover bcover3d" style={style} ref={hostRef} role="button" tabIndex={0} aria-label={t("Girar el libro", "Flip the book")}>
       {!hasCover && <div className="lbl">{displayTitle(book)}</div>}
     </div>
   );

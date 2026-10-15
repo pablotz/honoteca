@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js';
 import { useRef, useState } from 'react';
 import Tile from './Tile.jsx';
 import SourcesReport from './SourcesReport.jsx';
@@ -11,10 +12,10 @@ function IsbnChip({ isbn }) {
   const [label, setLabel] = useState(fmtIsbn(isbn));
   return (
     <button
-      type="button" className="chip" title="tap to copy"
+      type="button" className="chip" title={t("toca para copiar", "tap to copy")}
       onClick={async () => {
         const ok = await copyText(String(isbn || ''));
-        setLabel(ok ? 'copied ✓' : fmtIsbn(isbn));
+        setLabel(ok ? t("copiado ✓", "copied ✓") : fmtIsbn(isbn));
         if (ok) setTimeout(() => setLabel(fmtIsbn(isbn)), 1300);
       }}
     >{label}</button>
@@ -57,40 +58,40 @@ export default function ConfirmPanel({
 
   let heading, headingCls = '';
   if (state === 'A' || state === 'D') heading = (m && m.title_native) || (e0 && e0.title_native) || '';
-  else if (state === 'B') { headingCls = 'none'; heading = session.manual ? 'Escribe el ISBN o el título' : 'No se leyó el código'; }
+  else if (state === 'B') { headingCls = 'none'; heading = session.manual ? t("Escribe el ISBN o el título", "Enter the ISBN or title") : t("No se leyó el código", "Barcode not read"); }
   else {
     headingCls = 'none';
-    heading = session.isbn ? 'Sin match en la base' : (session.entry ? 'Título detectado · verifica' : 'Sin ISBN · escríbelo o usa ＋ portada');
+    heading = session.isbn ? t("Sin match en la base", "No catalog match") : (session.entry ? t("Título detectado · verifica", "Title detected · check it") : t("Sin ISBN · escríbelo o usa ＋ portada", "No ISBN · enter it or use ＋ cover"));
   }
 
   const src = m || e0;
   const au = state === 'A' || state === 'D' ? displayAuthor({ authors: src && src.authors }) : '';
 
-  const again = session.ticket ? { label: 'Volver a tomar', kind: 'seco', run: onRetake } : null;
+  const again = session.ticket ? { label: t("Volver a tomar", "Retake photo"), kind: 'seco', run: onRetake } : null;
   const withAgain = again ? [again] : [];
   const actions = {
     A: [
-      { label: 'Sí, es este', kind: 'primary', run: () => onCommit('A', 'create', withPub(onProposal())) },
-      { label: 'Corregir', kind: 'seco', run: onEditManual },
+      { label: t("Sí, es este", "Yes, this one"), kind: 'primary', run: () => onCommit('A', 'create', withPub(onProposal())) },
+      { label: t("Corregir", "Correct details"), kind: 'seco', run: onEditManual },
       ...withAgain,
     ],
-    B: [{ label: 'Buscar', kind: 'primary', run: () => onManual(entry) }, ...withAgain],
+    B: [{ label: t("Buscar", "Search"), kind: 'primary', run: () => onManual(entry) }, ...withAgain],
     C: [
-      { label: 'Buscar por título', kind: 'primary', run: () => { const q = entry.trim(); return q ? onSearchTitle(q) : entryRef.current?.focus(); } },
-      { label: 'Poner título a mano', kind: 'seco', run: () => { const v = entry.trim(); if (!v) { entryRef.current?.focus(); return; } onCommit('C', 'create', withPub({ ...onProposal(), title_native: v })); } },
-      { label: 'Guardar sin título', kind: 'seco', run: () => onCommit('C', 'create', withPub(onProposal())) },
+      { label: t("Buscar por título", "Search by title"), kind: 'primary', run: () => { const q = entry.trim(); return q ? onSearchTitle(q) : entryRef.current?.focus(); } },
+      { label: t("Poner título a mano", "Enter title manually"), kind: 'seco', run: () => { const v = entry.trim(); if (!v) { entryRef.current?.focus(); return; } onCommit('C', 'create', withPub({ ...onProposal(), title_native: v })); } },
+      { label: t("Guardar sin título", "Save without title"), kind: 'seco', run: () => onCommit('C', 'create', withPub(onProposal())) },
       ...withAgain,
     ],
     D: [
-      { label: 'Ya lo tengo', kind: 'primary', run: onDone },
-      { label: 'Es otro ejemplar · suma una copia', kind: 'seco', run: () => onCommit('D', 'create', onProposal()) },
+      { label: t("Ya lo tengo", "Already owned"), kind: 'primary', run: onDone },
+      { label: t("Es otro ejemplar · suma una copia", "Another copy · add it"), kind: 'seco', run: () => onCommit('D', 'create', onProposal()) },
     ],
   }[state] || [];
 
   return (
     <div className="confirm">
       <button type="button" className="btn ghost back" onClick={onBack}>
-        {modal ? '‹ Nueva búsqueda' : '‹ Estante'}
+        {modal ? t("‹ Nueva búsqueda", "‹ New search") : t("‹ Estante", "‹ Shelf")}
       </button>
       <div className="cframe">
         <Tile book={confirmBook} className="ctile" />
@@ -102,11 +103,11 @@ export default function ConfirmPanel({
           {state === 'A' && (
             <div className="pub-pick">
               <div className="pub-label">
-                Editorial:{' '}
+                {t('Editorial', 'Publisher')}:{' '}
                 {editingPub ? (
                   <input
                     className="input pub-input"
-                    placeholder="ej. Debolsillo, Planeta…"
+                    placeholder={t("ej. Debolsillo, Planeta…", "e.g. Penguin, Planeta…")}
                     value={pub}
                     onChange={(e) => setPub(e.target.value)}
                     onBlur={() => setEditingPub(false)}
@@ -115,7 +116,7 @@ export default function ConfirmPanel({
                   />
                 ) : (
                   <button type="button" className="chip pub-edit" onClick={() => setEditingPub(true)}>
-                    {pub || '＋ elegir editorial'} ✎
+                    {pub || t("＋ elegir editorial", "＋ choose publisher")} ✎
                   </button>
                 )}
               </div>
@@ -156,8 +157,8 @@ export default function ConfirmPanel({
 
       {state === 'D' && (
         <div className="who">
-          Ya tienes {session.existing.length} ejemplar(es):{' '}
-          {session.existing.map((e) => (e.location ? `${locText(e.location)}${e.needs_review ? ' (revisar)' : ''}` : 'sin ubicación')).join(' · ')}
+          {t('Ejemplares que ya tienes:', 'Copies already owned:')} {session.existing.length}:{' '}
+          {session.existing.map((e) => (e.location ? `${locText(e.location)}${e.needs_review ? t(" (revisar)", " (review)") : ''}` : t("sin ubicación", "no location"))).join(' · ')}
         </div>
       )}
 
@@ -165,7 +166,7 @@ export default function ConfirmPanel({
         <>
           <input
             ref={entryRef} className="input" id="entry"
-            placeholder={state === 'B' ? (session.manual ? 'escribe el ISBN o el título' : 'escribe el ISBN (13 dígitos)') : 'título'}
+            placeholder={state === 'B' ? (session.manual ? t("escribe el ISBN o el título", "enter the ISBN or title") : t("escribe el ISBN (13 dígitos)", "enter the ISBN (13 digits)")) : t("título", "title")}
             value={entry}
             onChange={(e) => onEntry(e.target.value)}
             onFocus={() => document.body.classList.add('typing')}
@@ -174,7 +175,7 @@ export default function ConfirmPanel({
           />
           {state === 'B' && session.badIsbn && (
             <div className="muted" style={{ fontSize: '12.5px', marginTop: '6px', color: 'var(--mustard)' }}>
-              el último dígito no cuadra (verifica el ISBN)
+              {t('el último dígito no cuadra (verifica el ISBN)', 'the check digit does not match (check the ISBN)')}
             </div>
           )}
         </>
@@ -183,9 +184,9 @@ export default function ConfirmPanel({
       {state === 'C' && (
         <>
           <button type="button" className="btn ghost" onClick={onPickCover}>
-            {session.cover ? '＋ otra portada' : '＋ portada (lee el título)'}
+            {session.cover ? t("＋ otra portada", "＋ another cover") : t("＋ portada (lee el título)", "＋ cover (read the title)")}
           </button>
-          {session.coverUrl && <img className="cvthumb" alt="portada" src={session.coverUrl} />}
+          {session.coverUrl && <img className="cvthumb" alt={t("portada", "cover")} src={session.coverUrl} />}
         </>
       )}
 

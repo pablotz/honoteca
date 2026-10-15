@@ -25,6 +25,7 @@ A physical book library and wishlist app that turns a quick phone photo of a boo
 - **Interactive 3D book & wooden room** — Inspect books as 3D objects (`Three.js`) with spine color extracted from your photo, flippable back-cover synopsis, gyroscope/mouse parallax, and soft shadows.
 - **Owned shelf & wishlist** — Separate **Mi estante** (`owned`) and **Comprar** (`buy`) shelves, multiple physical copies per ISBN (`×N`), and shelf/grid views with dark, sepia, and light themes.
 - **Passwordless whitelist & per-user libraries** — Magic-link email login (`ALLOWED_EMAILS`) where every whitelisted email gets its own isolated library inside the same SQLite database.
+- **Automatic English/Spanish interface** — Uses your browser or phone's language preferences, with English as the fallback. Book titles, publishers, and synopses keep their edition's language.
 
 ## Prerequisites
 

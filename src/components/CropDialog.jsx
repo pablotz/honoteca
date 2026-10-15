@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 // clamp: el recorte siempre queda cubierto (no se ve el fondo detrás de la foto).
@@ -81,11 +82,11 @@ export default function CropDialog({ file, onCancel, onDone }) {
         <div className="croptools">
           <span>Zoom</span>
           <input type="range" min="1" max="8" step="0.01" value={view ? view.z : 1} onChange={(e) => onZoom(Number(e.target.value))} />
-          <span>Arrastra para encuadrar</span>
+          <span>{t("Arrastra para encuadrar", "Drag to crop")}</span>
         </div>
         <div className="cropbtns">
-          <button type="button" className="btn" onClick={ok} disabled={!view}>Usar esta portada</button>
-          <button type="button" className="btn ghost" onClick={onCancel}>Cancelar</button>
+          <button type="button" className="btn" onClick={ok} disabled={!view}>{t("Usar esta portada", "Use this cover")}</button>
+          <button type="button" className="btn ghost" onClick={onCancel}>{t("Cancelar", "Cancel")}</button>
         </div>
       </div>
     </div>
