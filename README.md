@@ -22,10 +22,15 @@ A physical book library and wishlist app that turns a quick phone photo of a boo
 
 - **Photo-to-shelf workflow** — Snap the back barcode (`zxing-wasm` in the browser) or fall back to client-side Spanish/Latin cover OCR (`tesseract.js`) when a barcode isn't readable.
 - **Multi-catalog metadata** — Chains openBD, National Diet Library (NDL), Open Library, and Google Books, plus exact-ISBN cover caching from Open Library and El Sótano so cover images never rot.
-- **Interactive 3D book & wooden room** — Inspect books as 3D objects (`Three.js`) with spine color extracted from your photo, flippable back-cover synopsis, gyroscope/mouse parallax, and soft shadows.
-- **Owned shelf & wishlist** — Separate **Mi estante** (`owned`) and **Comprar** (`buy`) shelves, multiple physical copies per ISBN (`×N`), and shelf/grid views with dark, sepia, and light themes.
-- **Passwordless whitelist & per-user libraries** — Magic-link email login (`ALLOWED_EMAILS`) where every whitelisted email gets its own isolated library inside the same SQLite database.
+- **Interactive 3D book & wooden room** — Inspect books as 3D objects (`Three.js`) with spine color extracted from your photo, a full synopsis reader, gyroscope/mouse parallax, and soft shadows.
+- **Owned shelf & wishlist** — Separate **Mi estante** (`owned`) and **Comprar** (`buy`) shelves, multiple physical copies per ISBN (`×N`), move confirmation, and shelf/grid views with dark, sepia, and light themes.
+- **Personalized on every device** — Each account keeps its theme, shelf/grid view, active section, and 3–6 books-per-shelf preference in the browser. Phone covers shrink to fit, and a small guide explains how to add Honoteca to the home screen.
+- **Passwordless, private access** — Branded magic-link email login gives every account an isolated library. The app can remain invite-only or enable protected public signup with Resend, Turnstile, and built-in request limits.
 - **Automatic English/Spanish interface** — Uses your browser or phone's language preferences, with English as the fallback. Book titles, publishers, and synopses keep their edition's language.
+
+## Try it
+
+The public app is available at [honoteca.app](https://honoteca.app). Add it to your phone's home screen from the in-app guide for an app-like shortcut.
 
 ## Prerequisites
 
@@ -98,7 +103,7 @@ Copy `.env.example` to `.env` to configure authentication, email delivery, or st
 
 ## Deployment (Fly.io + GitHub Actions)
 
-The repository includes `Dockerfile`, `fly.toml`, and `.github/workflows/fly-deploy.yml` for automatic deployments on every push to `main`.
+The repository includes `Dockerfile`, `fly.toml`, and `.github/workflows/fly-deploy.yml`. Every successful push to `main` starts a GitHub Actions deployment to Fly.io; the workflow needs the repository's `FLY_API_TOKEN` secret.
 
 ```sh
 # 1. Create app and 1GB persistent volume
